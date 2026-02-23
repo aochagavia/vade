@@ -1,0 +1,24 @@
+[Unit]
+Description={{ APP_NAME }} (web application)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=python3 {{ APP_ACTIVE_ARTIFACTS_DIR }}/main.py
+Restart=on-failure
+RestartSec=5s
+User={{ APP_USERNAME }}
+Group={{ APP_USERNAME }}
+EnvironmentFile={{ APP_HOME_DIR }}/secrets
+
+# Restrict filesystem access
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths={{ APP_HOME_DIR }}/storage
+
+# Additional hardening
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

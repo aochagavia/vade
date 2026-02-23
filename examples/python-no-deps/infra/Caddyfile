@@ -1,0 +1,3 @@
+vanilla-deploy-test.ochagavia.nl {
+    reverse_proxy localhost:8000
+}

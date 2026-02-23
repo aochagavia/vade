@@ -1,0 +1,52 @@
+---
+- hosts: all
+  become: true
+  vars:
+    ansible_python_interpreter: auto_silent
+
+  tasks:
+    - name: Install dependencies for Caddy
+      apt:
+        pkg:
+          - curl
+          - debian-keyring
+          - debian-archive-keyring
+          - apt-transport-https
+        state: latest
+        update_cache: true
+
+    - name: Download and install Caddy GPG key
+      shell: |
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
+    - name: Set permissions on Caddy GPG keyring
+      file:
+        path: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Add Caddy repository to sources list
+      shell: |
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+      args:
+        creates: /etc/apt/sources.list.d/caddy-stable.list
+
+    - name: Set permissions on Caddy sources list
+      file:
+        path: /etc/apt/sources.list.d/caddy-stable.list
+        mode: '0644'
+
+    - name: Install Caddy
+      apt:
+        name: caddy
+        state: present
+        update_cache: true
+
+    - name: Configure Caddy to automatically pick up deployed Caddyfiles
+      ansible.builtin.copy:
+        content: "import /opt/vade/apps/*/active-deployment/Caddyfile\n"
+        dest: /etc/caddy/Caddyfile
+        owner: root
+        group: root
+        mode: '0644'

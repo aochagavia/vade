@@ -1,0 +1,11 @@
+[package]
+name = "guestbook"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { version = "0.8.7", default-features = false, features = ["tokio", "http1", "form"] }
+base64 = "0.22.1"
+jiff = "0.2.16"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.48.0", features = ["rt", "net"] }

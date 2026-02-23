@@ -1,0 +1,42 @@
+######
+# 1. # Tear down the original application
+######
+
+# Stop, disable, and delete systemd unit if present
+if [ -f "{{ APP_SYSTEMD_UNIT_FILE }}" ]; then
+  systemctl is-active --quiet "{{ APP_NAME }}.service" && systemctl stop "{{ APP_NAME }}.service"
+  systemctl disable "{{ APP_NAME }}.service"
+  rm "{{ APP_SYSTEMD_UNIT_FILE }}"
+  systemctl daemon-reload
+fi
+
+# Downgrade or remove active deployment dir
+{% if downgraded_dir is defined %}
+if [ -d "{{ APP_ACTIVE_DEPLOYMENT_DIR }}" ]; then
+  mv "{{ APP_ACTIVE_DEPLOYMENT_DIR }}" "{{ downgraded_dir }}"
+fi
+{% else %}
+rm -rf "{{ APP_ACTIVE_DEPLOYMENT_DIR }}"
+{% endif %}
+
+# Let Caddy know a previously deployed Caddyfile no longer exists
+systemctl reload caddy
+
+######
+# 2. # Launch the application from the active deployment
+######
+
+# Promote source dir
+mv -T "{{ src_dir }}" "{{ APP_ACTIVE_DEPLOYMENT_DIR }}"
+
+# Install, enable, and start a new systemd unit
+if [ -f "{{ APP_ACTIVE_DEPLOYMENT_DIR }}/app.service.backup" ]; then
+  cp "{{ APP_ACTIVE_DEPLOYMENT_DIR }}/app.service.backup" "{{ APP_SYSTEMD_UNIT_FILE }}"
+  chmod 0644 "{{ APP_SYSTEMD_UNIT_FILE }}"
+  chown root:root "{{ APP_SYSTEMD_UNIT_FILE }}"
+  systemctl daemon-reload
+  systemctl enable --now "{{ APP_NAME }}.service"
+fi
+
+# Let Caddy know a new Caddyfile might exist
+systemctl reload caddy

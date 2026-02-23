@@ -1,0 +1,5 @@
+{% include "playbook-header.yml.j2" -%}
+
+{% filter indent(4, true) %}
+{% include "setup-tasks.yml.j2" %}
+{% endfilter %}

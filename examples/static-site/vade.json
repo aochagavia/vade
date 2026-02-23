@@ -1,0 +1,4 @@
+{
+  "artifacts_dir": "artifacts",
+  "caddyfile_path": "infra/Caddyfile.j2"
+}
