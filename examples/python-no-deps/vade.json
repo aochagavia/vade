@@ -1,5 +1,5 @@
 {
-  "artifacts_dir": "artifacts",
-  "caddyfile_path": "infra/Caddyfile",
-  "systemd_unit_path": "infra/app.service.j2"
+  "artifactsDir": "artifacts",
+  "caddyfilePath": "infra/Caddyfile",
+  "systemdUnitPath": "infra/app.service.j2"
 }

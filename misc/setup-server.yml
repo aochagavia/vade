@@ -5,12 +5,17 @@
   become: true
   vars:
     ansible_python_interpreter: auto_silent
-    created_username: operator
+    operator_username: "{{ lookup('env', 'VADE_USERNAME') | default('operator', true) }}"
+    public_key_path: "{{ lookup('env', 'VADE_PUBLIC_KEY_PATH') }}"
 
   tasks:
     ############
     # User setup
-    #### #######
+    ############
+    - name: Fail if VADE_PUBLIC_KEY_PATH is not set
+      fail:
+        msg: "VADE_PUBLIC_KEY_PATH environment variable is missing!"
+      when: lookup('env', 'VADE_PUBLIC_KEY_PATH') == ''
     - name: Setup passwordless sudo
       lineinfile:
         path: /etc/sudoers
@@ -21,7 +26,7 @@
 
     - name: Create a new regular user with sudo privileges
       user:
-        name: "{{ created_username }}"
+        name: "{{ operator_username }}"
         shell: /bin/bash
         state: present
         groups: sudo
@@ -30,9 +35,9 @@
 
     - name: Set authorized key for remote user
       ansible.posix.authorized_key:
-        user: "{{ created_username }}"
+        user: "{{ operator_username }}"
         state: present
-        key: "{{ lookup('file', lookup('env','HOME') + '/.ssh/id_ecdsa.pub') }}"
+        key: "{{ lookup('file', public_key_path) }}"
 
     - name: Disable password authentication for root
       lineinfile:

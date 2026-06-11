@@ -39,11 +39,14 @@
 
 - name: Initialize application
   block:
-    {# - name: Ensure vade user directory exists
+
+    - name: Ensure vade user directory exists
       ansible.builtin.file:
-        path: "{{ '/opt/vade/system_users/expenses' | dirname }}"
+        path: "{{ VADE_SYSTEM_USER_FILE | dirname }}"
         state: directory
-        mode: '0755' #}
+        owner: root
+        group: root
+        mode: '0755'
 
     - name: Ensure app user is tracked
       ansible.builtin.file:
@@ -55,11 +58,13 @@
         modification_time: preserve
         access_time: preserve
 
-    {# - name: Ensure vade systemd unit directory exists
+    - name: Ensure vade systemd unit directory exists
       ansible.builtin.file:
-        path: "{{ '/opt/vade/systemd_units/expenses.service' | dirname }}"
+        path: "{{ VADE_SYSTEMD_UNIT_FILE | dirname }}"
         state: directory
-        mode: '0755' #}
+        owner: root
+        group: root
+        mode: '0755'
 
     - name: Ensure app unit file is tracked
       ansible.builtin.file:

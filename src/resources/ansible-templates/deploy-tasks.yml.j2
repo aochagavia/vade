@@ -71,26 +71,30 @@
   block:
     - name: Attempt deployment promotion
       become: true
-      shell: |
-        set -euo pipefail
+      shell:
+        cmd: |
+          set -euo pipefail
 
-        {% filter indent(8) %}
-        {%- with src_dir=APP_CANDIDATE_DEPLOYMENT_DIR, downgraded_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}
-          {%- include "deploy-promote.sh.j2" %}
-        {%- endwith -%}
-        {% endfilter %}
+          {% filter indent(10) %}
+          {%- with src_dir=APP_CANDIDATE_DEPLOYMENT_DIR, downgraded_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}
+            {%- include "deploy-promote.sh.j2" %}
+          {%- endwith -%}
+          {% endfilter %}
+        executable: /bin/bash
 
   rescue:
     - name: Restore the previous deployment if possible
       become: true
-      shell: |
-        set -euo pipefail
+      shell:
+        cmd: |
+          set -euo pipefail
 
-        {% filter indent(8) %}
-        {%- with src_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}
-          {%- include "deploy-promote.sh.j2" %}
-        {%- endwith -%}
-        {% endfilter %}
+          {% filter indent(10) %}
+          {%- with src_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}
+            {%- include "deploy-promote.sh.j2" %}
+          {%- endwith -%}
+          {% endfilter %}
+        executable: /bin/bash
 
     - name: Fail the deployment
       ansible.builtin.fail:

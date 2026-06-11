@@ -1,8 +1,8 @@
 use std::borrow::Cow;
-
+use std::path::Path;
 use minijinja::{Environment, UndefinedBehavior, context};
 use rootcause::Report;
-
+use serde::de::Error;
 use crate::ApplicationMetadata;
 
 pub fn base_minijinja_context(
@@ -37,6 +37,13 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     env.add_template_owned("playbook-header.yml.j2", PLAYBOOK_HEADER_TEMPLATE)?;
     env.add_template_owned("setup-tasks.yml.j2", SETUP_TASKS_TEMPLATE)?;
     env.add_template_owned("deploy-tasks.yml.j2", DEPLOY_TASKS_TEMPLATE)?;
+
+    fn dirname(path: &str) -> Result<String, minijinja::Error> {
+        let path = Path::new(path).parent().ok_or(minijinja::Error::custom("path did not have a parent"))?;
+        Ok(path.display().to_string())
+    }
+    env.add_filter("dirname", dirname);
+
     Ok(env)
 }
 
