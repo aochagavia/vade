@@ -3,12 +3,41 @@ set -euo pipefail
 
 VM_NAME=vade-test-vm
 
-# Remove any VM left over from a previous run
-sudo incus delete --force "$VM_NAME" 2>/dev/null || true
+# By default we create a fresh VM and provision it from scratch. Passing
+# --reuse-vm skips VM creation and server setup, reusing the existing VM.
+REUSE_VM=false
+for arg in "$@"; do
+  case "$arg" in
+    --reuse-vm) REUSE_VM=true ;;
+    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+  esac
+done
 
-# Launch a VM with our cloud-init config
-sudo incus launch images:debian/trixie/cloud "$VM_NAME" --vm \
-  --config=cloud-init.user-data="$(cat test-vm/cloud-init.yaml)"
+# Assert that a string is present in an HTTP response body, exiting the script otherwise.
+# Usage: assert_response_contains <check_name> <expected> <response>
+assert_response_contains() {
+  local check_name=$1
+  local expected=$2
+  local response=$3
+  if echo "$response" | grep -qF "$expected"; then
+    echo "✅ $check_name passed."
+  else
+    echo "❌ $check_name FAILED: expected to find '$expected' in the response body, but it was not present."
+    echo "--- Actual response body ---"
+    echo "$response"
+    echo "----------------------------"
+    exit 1
+  fi
+}
+
+if [[ "$REUSE_VM" == false ]]; then
+  # Remove any VM left over from a previous run
+  sudo incus delete --force "$VM_NAME" 2>/dev/null || true
+
+  # Launch a VM with our cloud-init config
+  sudo incus launch images:debian/trixie/cloud "$VM_NAME" --vm \
+    --config=cloud-init.user-data="$(cat test-vm/cloud-init.yaml)"
+fi
 
 # Wait for the incus agent to come up, then for cloud-init to finish provisioning
 echo "Waiting for the VM agent..."
@@ -29,28 +58,54 @@ fi
 
 # The VM is ephemeral and its IP may be reused across runs, so we ignore
 # host keys entirely
-PYINFRA_SSH="-y --key ./test-vm/id_ed25519 --data ssh_strict_host_key_checking=off --data ssh_known_hosts_file=/dev/null"
+PYINFRA_SSH=(-y --key ./test-vm/id_ed25519 --data ssh_strict_host_key_checking=off --data ssh_known_hosts_file=/dev/null)
 
-# Normal server setup
-VADE_PUBLIC_KEY_PATH=$(realpath test-vm/id_ed25519.pub) pyinfra --user root $PYINFRA_SSH "$VM_IP_ADDR" ../misc/setup-server.py
-pyinfra --user operator $PYINFRA_SSH "$VM_IP_ADDR" ../misc/setup-caddy.py
+if [[ "$REUSE_VM" == false ]]; then
+  # Normal server setup
+  VADE_PUBLIC_KEY_PATH=$(realpath test-vm/id_ed25519.pub) pyinfra --user root "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../misc/setup-server.py
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../misc/setup-caddy.py
 
-# Additional setup for testing (to use self-signed certs in Caddy)
-pyinfra --user operator $PYINFRA_SSH "$VM_IP_ADDR" ./test-vm/patch-caddy-config.py
-
-# Deploy a static website
-cargo run -- deploy static-app-name --config ../examples/static-site/vade.json --out-dir ../examples/static-site/vade-gen
-pyinfra --user operator $PYINFRA_SSH "$VM_IP_ADDR" ../examples/static-site/vade-gen/deploy.py
-
-# Check that the deployment worked
-RESPONSE=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)
-EXPECTED='<h1>Hello World</h1>'
-if echo "$RESPONSE" | grep -qF "$EXPECTED"; then
-  echo "✅ Deployment check passed."
-else
-  echo "❌ Deployment check FAILED: expected to find '$EXPECTED' in the response body, but it was not present."
-  echo "--- Actual response body ---"
-  echo "$RESPONSE"
-  echo "----------------------------"
-  exit 1
+  # Additional setup for testing (to use self-signed certs in Caddy)
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ./test-vm/patch-caddy-config.py
 fi
+
+###
+# Static website
+###
+
+# Deploy
+cargo run -- deploy my-static-site --config ../examples/static-site/vade.json --out-dir ../examples/static-site/vade-gen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vade-gen/deploy.py
+
+# Check
+RESPONSE=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)
+assert_response_contains "Static site check" "<h1>Hello World</h1>" "$RESPONSE"
+
+###
+# Guestbook
+###
+
+# Setup
+cargo run -- setup my-guestbook --out-dir ../examples/guestbook/vade-gen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/setup.py
+
+# Set secrets
+sudo incus exec vade-test-vm -- sh -c 'printf "AUTH_USERNAME=foo\nAUTH_PASSWORD=123\n" > /opt/vade/apps/my-guestbook/secrets'
+
+# Deploy
+cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.json --out-dir ../examples/guestbook/vade-gen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/deploy.py
+
+# Check GET
+RESPONSE=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
+assert_response_contains "Guestbook GET check" '<h2>Sign the Guestbook:</h2>' "$RESPONSE"
+
+# Check POST + message is actually persisted
+SIGN_MESSAGE="Hello from the e2e test ($(date +%s)-$RANDOM)"
+curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" \
+  --data-urlencode "name=E2E Tester" \
+  --data-urlencode "message=$SIGN_MESSAGE" \
+  https://guestbook.example.com/sign > /dev/null
+
+RESPONSE=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
+assert_response_contains "Guestbook POST check" "$SIGN_MESSAGE" "$RESPONSE"
