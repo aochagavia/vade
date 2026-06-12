@@ -34,9 +34,9 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
     env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)?;
-    env.add_template_owned("playbook-header.yml.j2", PLAYBOOK_HEADER_TEMPLATE)?;
-    env.add_template_owned("setup-tasks.yml.j2", SETUP_TASKS_TEMPLATE)?;
-    env.add_template_owned("deploy-tasks.yml.j2", DEPLOY_TASKS_TEMPLATE)?;
+    env.add_template_owned("header.py.j2", HEADER_TEMPLATE)?;
+    env.add_template_owned("setup-tasks.py.j2", SETUP_TASKS_TEMPLATE)?;
+    env.add_template_owned("deploy-tasks.py.j2", DEPLOY_TASKS_TEMPLATE)?;
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
         let path = Path::new(path).parent().ok_or(minijinja::Error::custom("path did not have a parent"))?;
@@ -73,15 +73,15 @@ pub fn render(
 }
 
 // Building blocks
-static PLAYBOOK_HEADER_TEMPLATE: &str =
-    include_str!("resources/ansible-templates/playbook-header.yml.j2");
-static SETUP_TASKS_TEMPLATE: &str = include_str!("resources/ansible-templates/setup-tasks.yml.j2");
+static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/header.py.j2");
+static SETUP_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/setup-tasks.py.j2");
 static DEPLOY_TASKS_TEMPLATE: &str =
-    include_str!("resources/ansible-templates/deploy-tasks.yml.j2");
+    include_str!("resources/pyinfra-templates/deploy-tasks.py.j2");
 static PROMOTE_SCRIPT_TEMPLATE: &str =
-    include_str!("resources/ansible-templates/deploy-promote.sh.j2");
+    include_str!("resources/pyinfra-templates/deploy-promote.sh.j2");
 
-// Full playbooks
+// Full deploys
 pub static DEPLOY_PLAYBOOK_TEMPLATE: &str =
-    include_str!("resources/ansible-templates/deploy.yml.j2");
-pub static SETUP_PLAYBOOK_TEMPLATE: &str = include_str!("resources/ansible-templates/setup.yml.j2");
+    include_str!("resources/pyinfra-templates/deploy.py.j2");
+pub static SETUP_PLAYBOOK_TEMPLATE: &str =
+    include_str!("resources/pyinfra-templates/setup.py.j2");

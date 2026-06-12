@@ -27,16 +27,20 @@ if [[ -z "$VM_IP_ADDR" ]]; then
   exit 1
 fi
 
+# The VM is ephemeral and its IP may be reused across runs, so we ignore
+# host keys entirely
+PYINFRA_SSH="-y --key ./test-vm/id_ed25519 --data ssh_strict_host_key_checking=off --data ssh_known_hosts_file=/dev/null"
+
 # Normal server setup
-VADE_PUBLIC_KEY_PATH=$(realpath test-vm/id_ed25519.pub) ansible-playbook ../misc/setup-server.yml -i "$VM_IP_ADDR," -u root --private-key=./test-vm/id_ed25519
-ansible-playbook ../misc/setup-caddy.yml -i "$VM_IP_ADDR," -u operator --private-key=./test-vm/id_ed25519
+VADE_PUBLIC_KEY_PATH=$(realpath test-vm/id_ed25519.pub) pyinfra --user root $PYINFRA_SSH "$VM_IP_ADDR" ../misc/setup-server.py
+pyinfra --user operator $PYINFRA_SSH "$VM_IP_ADDR" ../misc/setup-caddy.py
 
 # Additional setup for testing (to use self-signed certs in Caddy)
-ansible-playbook ./test-vm/patch-caddy-config.yml -i "$VM_IP_ADDR," -u operator --private-key=./test-vm/id_ed25519
+pyinfra --user operator $PYINFRA_SSH "$VM_IP_ADDR" ./test-vm/patch-caddy-config.py
 
 # Deploy a static website
 cargo run -- deploy static-app-name --config ../examples/static-site/vade.json --out-dir ../examples/static-site/vade-gen
-ansible-playbook ../examples/static-site/vade-gen/playbook.yml -i "$VM_IP_ADDR," -u operator --private-key=./test-vm/id_ed25519
+pyinfra --user operator $PYINFRA_SSH "$VM_IP_ADDR" ../examples/static-site/vade-gen/deploy.py
 
 # Check that the deployment worked
 RESPONSE=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)

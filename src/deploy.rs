@@ -84,18 +84,18 @@ impl Deploy {
             })
             .transpose()?;
 
-        // Write playbook
+        // Write the pyinfra deploy
         // safety: the template is always valid
-        let playbook = templating::render(
+        let deploy = templating::render(
             &mut env,
             &context,
-            "deploy.yml.j2",
+            "deploy.py.j2",
             DEPLOY_PLAYBOOK_TEMPLATE.into(),
         )
         .unwrap();
 
-        fs::write(self.out_dir.join("playbook.yml"), playbook)
-            .context("failed to write playbook")?;
+        fs::write(self.out_dir.join("deploy.py"), deploy)
+            .context("failed to write pyinfra deploy")?;
 
         if let Some(systemd_unit) = systemd_unit_rendered {
             fs::write(self.out_dir.join("app.service"), systemd_unit)

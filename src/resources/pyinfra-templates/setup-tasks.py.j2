@@ -1,0 +1,92 @@
+###
+# Sanity checks
+###
+
+# The application's username must not collide with a pre-existing, unmanaged user.
+if "{{ APP_USERNAME }}" in host.get_fact(Users) and not host.get_fact(File, path="{{ VADE_SYSTEM_USER_FILE }}"):
+    raise DeployError(
+        "Your application's name (`{{ APP_USERNAME }}`) conflicts with an existing user on the "
+        "system. Please choose a different one and try again."
+    )
+
+# The application's systemd unit must not collide with a pre-existing, unmanaged unit.
+if host.get_fact(File, path="{{ APP_SYSTEMD_UNIT_FILE }}") and not host.get_fact(File, path="{{ VADE_SYSTEMD_UNIT_FILE }}"):
+    raise DeployError(
+        "Your application's name (`{{ APP_USERNAME }}`) conflicts with an existing systemd service "
+        "on the system. Please choose a different one and try again."
+    )
+
+###
+# Initialize application
+###
+
+files.directory(
+    name="Ensure vade user directory exists",
+    path="{{ VADE_SYSTEM_USER_FILE | dirname }}",
+    user="root",
+    group="root",
+    mode="755",
+)
+
+files.file(
+    name="Ensure app user is tracked",
+    path="{{ VADE_SYSTEM_USER_FILE }}",
+    user="root",
+    group="root",
+    mode="644",
+)
+
+files.directory(
+    name="Ensure vade systemd unit directory exists",
+    path="{{ VADE_SYSTEMD_UNIT_FILE | dirname }}",
+    user="root",
+    group="root",
+    mode="755",
+)
+
+files.file(
+    name="Ensure app unit file is tracked",
+    path="{{ VADE_SYSTEMD_UNIT_FILE }}",
+    user="root",
+    group="root",
+    mode="644",
+)
+
+server.user(
+    name="Ensure app user exists",
+    user="{{ APP_USERNAME }}",
+    system=True,
+    ensure_home=False,
+)
+
+files.directory(
+    name="Ensure app directory exists",
+    path="{{ APP_HOME_DIR }}",
+    user="{{ APP_USERNAME }}",
+    group="{{ APP_USERNAME }}",
+    mode="755",
+)
+
+files.directory(
+    name="Ensure storage directory exists",
+    path="{{ APP_STORAGE_DIR }}",
+    user="{{ APP_USERNAME }}",
+    group="{{ APP_USERNAME }}",
+    mode="700",
+)
+
+files.file(
+    name="Ensure secrets file exists",
+    path="{{ APP_SECRETS_FILE }}",
+    user="root",
+    group="root",
+    mode="600",
+)
+
+files.directory(
+    name="Ensure active deployment exists",
+    path="{{ APP_ACTIVE_DEPLOYMENT_DIR }}",
+    user="{{ APP_USERNAME }}",
+    group="{{ APP_USERNAME }}",
+    mode="755",
+)

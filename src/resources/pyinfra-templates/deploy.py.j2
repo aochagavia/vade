@@ -1,0 +1,5 @@
+{% include "header.py.j2" %}
+{% if SKIP_SETUP is not defined or not SKIP_SETUP %}
+{% include "setup-tasks.py.j2" %}
+{% endif %}
+{% include "deploy-tasks.py.j2" %}

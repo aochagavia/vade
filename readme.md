@@ -8,9 +8,9 @@ wheel. As a side-effect, you have access to the full arsenal of Linux tools when
 deployment and when troubleshooting.
 
 Following this minimalistic philosophy, vade never talks directly to the server, but
-delegates communication to ansible instead. If you squint a little, you could say vade is
-an ansible playbook generator with built-in conventions and utility commands. It makes choices about
-how apps are deployed, how secrets are stored, how TLS certificates are handled, etc.
+delegates communication to [pyinfra](https://pyinfra.com/) instead. If you squint a little, you could
+say vade is a pyinfra deploy generator with built-in conventions and utility commands. It makes choices
+about how apps are deployed, how secrets are stored, how TLS certificates are handled, etc.
 
 ### Is it for me?
 
@@ -47,13 +47,13 @@ vade scaffold static
 # Set the domain to something you own instead of `example.com`
 sed -i 's/example\.com/<your-domain>/g' infra/Caddyfile
 
-# Generate the ansible playbook and related files (at `./vade-gen`)
+# Generate the pyinfra deploy and related files (at `./vade-gen`)
 vade deploy infra/vade.json my-static-site
 
-# Optional: inspect the generated playbook to ensure it's not going to destroy anything you care about
+# Optional: inspect the generated deploy to ensure it's not going to destroy anything you care about
 
 # Actually deploy to the server!
-ansible-playbook vade-gen/playbook.yml -i "<your-domain>," -u <username>
+pyinfra --user <username> <your-domain> vade-gen/deploy.py
 ```
 
 After running this to completion, and assuming you have set the necessary DNS records, you can visit
@@ -73,7 +73,6 @@ dependencies are present:
 - `systemd`
 - `rsync`
 - `caddy` (the HTTP server)
-- `python` (necessary for ansible connections to the server).
 
 None of these dependencies require additional configuration, except Caddy. Its configuration file
 (usually at `/etc/caddy/Caddyfile`) should contain the line `import /opt/vade/apps/*/active-deployment/Caddyfile`,
@@ -81,11 +80,11 @@ instructing Caddy to automatically pick up the routing configuration of deployed
 
 #### Client
 
-The vade CLI does not have system dependencies, but since it generates ansible playbooks
+The vade CLI does not have system dependencies, but since it generates pyinfra deploys
 you will need:
 
-- `ansible`
-- `rsync` (used by ansible when synchronizing directories)
+- `pyinfra`
+- `rsync` (used by pyinfra when synchronizing directories)
 
 ## Applications
 

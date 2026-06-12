@@ -35,7 +35,7 @@ struct SetupCommand {
     ///
     /// Only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed
     application_name: ApplicationName,
-    /// The directory where the ansible playbook and related files should be generated
+    /// The directory where the pyinfra deploy and related files should be generated
     #[arg(short, long, default_value = "vade-gen")]
     out_dir: PathBuf,
 }
@@ -49,10 +49,10 @@ struct DeployCommand {
     /// The path to vanilla deploy's configuration file (defaults to `vade.json`)
     #[arg(short, long = "config")]
     configuration_file: Option<PathBuf>,
-    /// The directory where the ansible playbook and related files should be generated
+    /// The directory where the pyinfra deploy and related files should be generated
     #[arg(short, long, default_value = "vade-gen")]
     out_dir: PathBuf,
-    /// If true, skips setup tasks in the generated playbook
+    /// If true, skips setup tasks in the generated deploy
     ///
     /// Offers slightly better speed when deploying new versions of an application
     #[arg(long)]

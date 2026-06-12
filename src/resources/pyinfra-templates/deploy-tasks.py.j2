@@ -1,0 +1,91 @@
+###
+# Initialize deployment candidate
+###
+
+files.directory(
+    name="Delete stale candidate deployment if it exists",
+    path="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}",
+    present=False,
+)
+
+files.directory(
+    name="Create candidate deployment directory",
+    path="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}",
+    user="{{ APP_USERNAME }}",
+    group="{{ APP_USERNAME }}",
+    mode="755",
+)
+
+{% if APP_HAS_ARTIFACTS %}
+if host.get_fact(Directory, path="{{ APP_ACTIVE_DEPLOYMENT_DIR }}/artifacts"):
+    server.shell(
+        name="Mirror artifacts from active deployment (to avoid retransferring them)",
+        commands=["cp -al {{ APP_ACTIVE_DEPLOYMENT_DIR }}/artifacts {{ APP_CANDIDATE_DEPLOYMENT_DIR }}/artifacts"],
+    )
+
+files.rsync(
+    name="Sync local artifacts to candidate deployment",
+    src="{{ LOCAL_ARTIFACTS_DIR }}/",
+    dest="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}/artifacts",
+    flags=["-a", "--delete"],
+    _sudo=True,
+    _sudo_user="{{ APP_USERNAME }}",
+)
+{% endif %}
+
+{% if APP_HAS_SYSTEMD_UNIT %}
+files.put(
+    name="Upload systemd unit to candidate deployment",
+    src="{{ LOCAL_SYSTEMD_UNIT_PATH }}",
+    dest="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}/app.service.backup",
+    user="{{ APP_USERNAME }}",
+    group="{{ APP_USERNAME }}",
+    mode="644",
+)
+{% endif %}
+
+{% if APP_HAS_CADDYFILE %}
+files.put(
+    name="Upload Caddyfile to candidate deployment",
+    src="{{ LOCAL_CADDYFILE_PATH }}",
+    dest="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}/Caddyfile",
+    user="{{ APP_USERNAME }}",
+    group="{{ APP_USERNAME }}",
+    mode="644",
+)
+{% endif %}
+
+files.directory(
+    name="Delete previous deployment",
+    path="{{ APP_PREVIOUS_DEPLOYMENT_DIR }}",
+    present=False,
+)
+
+###
+# Promote deployment candidate to active deployment
+###
+
+server.shell(
+    name="Promote deployment candidate (rolling back on failure)",
+    commands=r"""
+set -uo pipefail
+
+bash <<'__VADE_PROMOTE__'
+set -euo pipefail
+{% filter trim %}{% with src_dir=APP_CANDIDATE_DEPLOYMENT_DIR, downgraded_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
+__VADE_PROMOTE__
+promote_status=$?
+
+if [ "$promote_status" -eq 0 ]; then
+  exit 0
+fi
+
+echo "Promotion failed (exit $promote_status), rolling back to the previous deployment..." >&2
+bash <<'__VADE_ROLLBACK__'
+set -euo pipefail
+{% filter trim %}{% with src_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
+__VADE_ROLLBACK__
+echo "Deploying failed and was rolled back" >&2
+exit 1
+""",
+)

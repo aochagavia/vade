@@ -24,18 +24,18 @@ impl Setup {
             templating::base_minijinja_context(&self.application_meta, false, false, false);
         let mut env = templating::base_minijinja_env()?;
 
-        // Write playbook
+        // Write the pyinfra deploy
         // safety: the template is always valid
-        let playbook = templating::render(
+        let deploy = templating::render(
             &mut env,
             &context,
-            "setup.yml.j2",
+            "setup.py.j2",
             SETUP_PLAYBOOK_TEMPLATE.into(),
         )
         .unwrap();
 
-        fs::write(self.out_dir.join("playbook.yml"), playbook)
-            .context("failed to write playbook")?;
+        fs::write(self.out_dir.join("setup.py"), deploy)
+            .context("failed to write pyinfra deploy")?;
 
         Ok(())
     }

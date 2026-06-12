@@ -1,0 +1,7 @@
+from pyinfra import config, host
+from pyinfra.operations import server, files
+from pyinfra.facts.server import Users
+from pyinfra.facts.files import File, Directory
+from pyinfra.api.exceptions import DeployError
+
+config.SUDO = True

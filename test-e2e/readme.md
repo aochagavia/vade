@@ -3,7 +3,8 @@
 Requirements (other than vade's own):
 
 - `incus`: creates and tears down the test VM (see )
-- `ansible`: provisions the VM (needs the `ansible.posix` and `community.general` collections)
+- `pyinfra`: provisions the VM and applies the generated deploy
+- `rsync`: used by pyinfra to sync deployment artifacts
 - `curl`: makes requests to ensure the deployed apps work
 
 ## Incus setup
