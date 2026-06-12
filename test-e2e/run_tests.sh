@@ -39,4 +39,14 @@ cargo run -- deploy static-app-name --config ../examples/static-site/vade.json -
 ansible-playbook ../examples/static-site/vade-gen/playbook.yml -i "$VM_IP_ADDR," -u operator --private-key=./test-vm/id_ed25519
 
 # Check that the deployment worked
-curl -k --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/
+RESPONSE=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)
+EXPECTED='<h1>Hello World</h1>'
+if echo "$RESPONSE" | grep -qF "$EXPECTED"; then
+  echo "✅ Deployment check passed."
+else
+  echo "❌ Deployment check FAILED: expected to find '$EXPECTED' in the response body, but it was not present."
+  echo "--- Actual response body ---"
+  echo "$RESPONSE"
+  echo "----------------------------"
+  exit 1
+fi
