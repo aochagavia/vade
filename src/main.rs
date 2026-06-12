@@ -170,8 +170,7 @@ fn init() -> Result<(), Report> {
 
     // Default config (vade.json)
     let default_config = example_app_config();
-    let config_file =
-        File::create("vade.json").context("failed to create `vade.json`")?;
+    let config_file = File::create("vade.json").context("failed to create `vade.json`")?;
     serde_json::to_writer_pretty(config_file, &default_config)
         .context("failed to write `vade.json`")?;
 
@@ -191,9 +190,7 @@ fn setup(command: SetupCommand) -> Result<(), Report> {
 
 fn deploy(command: DeployCommand) -> Result<(), Report> {
     let uses_default_config_path = command.configuration_file.is_none();
-    let config_path = command
-        .configuration_file
-        .unwrap_or("vade.json".into());
+    let config_path = command.configuration_file.unwrap_or("vade.json".into());
     let config_json = fs::read(&config_path).context_with(|| {
         let mut msg = format!("failed to load configuration file at `{}`", config_path.display());
         if uses_default_config_path {

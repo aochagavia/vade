@@ -1,9 +1,9 @@
-use std::borrow::Cow;
-use std::path::Path;
+use crate::ApplicationMetadata;
 use minijinja::{Environment, UndefinedBehavior, context};
 use rootcause::Report;
 use serde::de::Error;
-use crate::ApplicationMetadata;
+use std::borrow::Cow;
+use std::path::Path;
 
 pub fn base_minijinja_context(
     app_meta: &ApplicationMetadata,
@@ -39,7 +39,9 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     env.add_template_owned("deploy-tasks.py.j2", DEPLOY_TASKS_TEMPLATE)?;
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
-        let path = Path::new(path).parent().ok_or(minijinja::Error::custom("path did not have a parent"))?;
+        let path = Path::new(path)
+            .parent()
+            .ok_or(minijinja::Error::custom("path did not have a parent"))?;
         Ok(path.display().to_string())
     }
     env.add_filter("dirname", dirname);
@@ -75,13 +77,11 @@ pub fn render(
 // Building blocks
 static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/header.py.j2");
 static SETUP_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/setup-tasks.py.j2");
-static DEPLOY_TASKS_TEMPLATE: &str =
-    include_str!("resources/pyinfra-templates/deploy-tasks.py.j2");
+static DEPLOY_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/deploy-tasks.py.j2");
 static PROMOTE_SCRIPT_TEMPLATE: &str =
     include_str!("resources/pyinfra-templates/deploy-promote.sh.j2");
 
 // Full deploys
 pub static DEPLOY_PLAYBOOK_TEMPLATE: &str =
     include_str!("resources/pyinfra-templates/deploy.py.j2");
-pub static SETUP_PLAYBOOK_TEMPLATE: &str =
-    include_str!("resources/pyinfra-templates/setup.py.j2");
+pub static SETUP_PLAYBOOK_TEMPLATE: &str = include_str!("resources/pyinfra-templates/setup.py.j2");
