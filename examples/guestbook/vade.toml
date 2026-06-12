@@ -1,0 +1,11 @@
+[artifacts]
+path = "artifacts"
+
+[systemd-unit.generated]
+template = "application"
+exec-start = "{{ APP_ACTIVE_ARTIFACTS_DIR }}/guestbook"
+
+[caddyfile.generated]
+template = "reverse-proxy"
+domains = ["guestbook.example.com"]
+port = 8000

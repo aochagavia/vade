@@ -4,14 +4,14 @@ use rootcause::prelude::ResultExt;
 use std::fs;
 use std::path::{self, PathBuf};
 
-use crate::templating::DEPLOY_PLAYBOOK_TEMPLATE;
+use crate::templating::{DEPLOY_PLAYBOOK_TEMPLATE, TemplateAndExtraVars};
 use crate::{ApplicationMetadata, templating};
 
 pub struct Deploy {
     pub application_meta: ApplicationMetadata,
     pub artifacts_dir: Option<PathBuf>,
-    pub systemd_unit: Option<String>,
-    pub caddyfile: Option<String>,
+    pub systemd_unit: Option<TemplateAndExtraVars>,
+    pub caddyfile: Option<TemplateAndExtraVars>,
     pub out_dir: PathBuf,
     pub skip_setup: bool,
 }
@@ -71,15 +71,28 @@ impl Deploy {
         let systemd_unit_rendered = self
             .systemd_unit
             .map(|systemd_unit| {
-                templating::render(&mut env, &context, "unit_file", systemd_unit.into())
-                    .context("invalid jinja2 template for systemd unit")
+                let context = context! {
+                    ..context.clone(),
+                    ..systemd_unit.extra_vars
+                };
+                templating::render(
+                    &mut env,
+                    &context,
+                    "unit_file",
+                    systemd_unit.template.into(),
+                )
+                .context("invalid jinja2 template for systemd unit")
             })
             .transpose()?;
 
         let caddyfile_rendered = self
             .caddyfile
             .map(|caddyfile| {
-                templating::render(&mut env, &context, "caddyfile", caddyfile.into())
+                let context = context! {
+                    ..context.clone(),
+                    ..caddyfile.extra_vars
+                };
+                templating::render(&mut env, &context, "caddyfile", caddyfile.template.into())
                     .context("invalid jinja2 template for Caddyfile")
             })
             .transpose()?;

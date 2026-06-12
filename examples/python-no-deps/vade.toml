@@ -1,0 +1,11 @@
+[artifacts]
+path = "artifacts"
+
+[systemd-unit.generated]
+template = "application"
+exec-start = "python3 {{ APP_ACTIVE_ARTIFACTS_DIR }}/main.py"
+
+[caddyfile.generated]
+template = "reverse-proxy"
+domains = ["python-site.example.com"]
+port = 8000

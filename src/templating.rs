@@ -3,7 +3,13 @@ use minijinja::{Environment, UndefinedBehavior, context};
 use rootcause::Report;
 use serde::de::Error;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::Path;
+
+pub struct TemplateAndExtraVars {
+    pub template: String,
+    pub extra_vars: HashMap<&'static str, minijinja::Value>,
+}
 
 pub fn base_minijinja_context(
     app_meta: &ApplicationMetadata,
@@ -55,24 +61,49 @@ pub fn render(
     template_name: &'static str,
     template: Cow<'static, str>,
 ) -> Result<String, Report> {
-    env.add_template_owned(template_name, template)?;
+    // We re-render the results of the previous render until we reach a fixpoint. This is to allow
+    // for using variables inside other jinja variables.
+    let mut template_string = template.to_string();
+    let mut i = 0;
+    loop {
+        let template_name = format!("{template_name}{i}");
+        i += 1;
+        env.add_template_owned(template_name.clone(), template_string.clone())?;
 
-    // safety: we just added the template to the environment
-    let template = env.get_template(template_name).unwrap();
-    match template.render(context) {
-        Ok(s) => Ok(s),
-        Err(e) => {
-            let mut err = &e as &dyn std::error::Error;
-            while let Some(next_err) = err.source() {
-                eprintln!();
-                eprintln!("caused by: {:#}", next_err);
-                err = next_err;
+        // safety: we just added the template to the environment
+        let template = env.get_template(&template_name).unwrap();
+
+        let rendered = match template.render(context) {
+            Ok(s) => s,
+            Err(e) => {
+                let mut err = &e as &dyn std::error::Error;
+                while let Some(next_err) = err.source() {
+                    eprintln!();
+                    eprintln!("caused by: {:#}", next_err);
+                    err = next_err;
+                }
+
+                return Err(e.into());
             }
+        };
 
-            Err(e.into())
+        if template_string == rendered {
+            return Ok(rendered);
+        } else {
+            template_string = rendered;
         }
     }
 }
+
+// Caddyfile templates
+pub static CADDYFILE_STATIC_FILES: &str =
+    include_str!("resources/caddyfile-templates/static-files.j2");
+pub static CADDYFILE_REVERSE_PROXY: &str =
+    include_str!("resources/caddyfile-templates/reverse-proxy.j2");
+
+// Systemd unit templates
+pub static SYSTEMD_APPLICATION: &str =
+    include_str!("resources/systemd-unit-templates/application.service.j2");
 
 // Building blocks
 static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/header.py.j2");

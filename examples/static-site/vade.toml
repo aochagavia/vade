@@ -1,0 +1,6 @@
+[artifacts]
+path = "artifacts"
+
+[caddyfile.generated]
+template = "static-files"
+domains = ["static-site.example.com"]

@@ -74,7 +74,7 @@ fi
 ###
 
 # Deploy
-cargo run -- deploy my-static-site --config ../examples/static-site/vade.json --out-dir ../examples/static-site/vade-gen
+cargo run -- deploy my-static-site --config ../examples/static-site/vade.toml --out-dir ../examples/static-site/vade-gen
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vade-gen/deploy.py
 
 # Check
@@ -93,7 +93,7 @@ pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/
 sudo incus exec vade-test-vm -- sh -c 'printf "AUTH_USERNAME=foo\nAUTH_PASSWORD=123\n" > /opt/vade/apps/my-guestbook/secrets'
 
 # Deploy
-cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.json --out-dir ../examples/guestbook/vade-gen
+cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.toml --out-dir ../examples/guestbook/vade-gen
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/deploy.py
 
 # Check GET

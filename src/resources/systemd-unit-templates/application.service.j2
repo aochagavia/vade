@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart={{ APP_ACTIVE_ARTIFACTS_DIR }}/guestbook
+ExecStart={{ SYSTEMD_UNIT_EXEC_START }}
 WorkingDirectory={{ APP_HOME_DIR }}/storage
 Restart=on-failure
 RestartSec=5s
