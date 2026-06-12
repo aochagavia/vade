@@ -13,9 +13,11 @@ class HelloWorldHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(response.encode())
 
-def run_server(port=8000):
-    server_address = ('', port)
+def run_server():
+    randomize_port = os.environ.get('RANDOMIZE_PORT')
+    server_address = ('', 8000 if randomize_port is None else 0)
     httpd = HTTPServer(server_address, HelloWorldHandler)
+    port = httpd.server_address[1]
     print(f'Server running on http://localhost:{port}')
     httpd.serve_forever()
 

@@ -9,7 +9,8 @@ use axum::{
 use base64::prelude::*;
 use jiff::Timestamp;
 use serde::Deserialize;
-use std::fs;
+use std::{env, fs};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
@@ -162,8 +163,16 @@ fn main() -> std::io::Result<()> {
         .enable_all()
         .build()?;
 
+    let randomize_port = env::var("RANDOMIZE_PORT");
     rt.block_on(async move {
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await?;
+        let ip = Ipv4Addr::new(0, 0, 0, 0);
+        let port = if randomize_port.is_ok() {
+            0
+        } else {
+            8000
+        };
+        let listener = tokio::net::TcpListener::bind(SocketAddrV4::new(ip, port)).await?;
+        println!("Listening on http://{}", listener.local_addr().unwrap());
         axum::serve(listener, app).await?;
         Ok(())
     })
