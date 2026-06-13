@@ -1,6 +1,6 @@
 [artifacts]
 path = "artifacts"
 
-[caddyfile.generated]
-template = "static-files"
+[caddyfile]
+template = "builtin://static-files"
 domains = ["static-site.example.com"]

@@ -159,7 +159,7 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
     let config_parent_path = config_path.parent().unwrap();
 
     // Sanity check artifacts dir
-    let artifacts_dir = path_relative_to(config_parent_path, config.artifacts.path);
+    let artifacts_dir = resolve_relative_to(config_parent_path, &config.artifacts.path);
     if !artifacts_dir.is_dir() {
         return Err(report!(
             "the provided artifacts directory does not exist or is not a directory (check the path at `{}`)",
@@ -191,9 +191,9 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
     deploy.execute()
 }
 
-fn path_relative_to(main: &Path, maybe_relative: PathBuf) -> PathBuf {
+fn resolve_relative_to(main: &Path, maybe_relative: &Path) -> PathBuf {
     if maybe_relative.is_absolute() {
-        maybe_relative
+        maybe_relative.to_owned()
     } else {
         main.join(maybe_relative)
     }
