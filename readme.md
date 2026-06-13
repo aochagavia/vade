@@ -72,6 +72,7 @@ dependencies are present:
 
 - `systemd`
 - `rsync`
+- `python`
 - `caddy` (the HTTP server)
 
 None of these dependencies require additional configuration, except Caddy. Its configuration file

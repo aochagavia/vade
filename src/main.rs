@@ -48,11 +48,6 @@ struct DeployCommand {
     /// The directory where the pyinfra deploy and related files should be generated
     #[arg(short, long, default_value = "vade-gen")]
     out_dir: PathBuf,
-    /// If true, skips setup tasks in the generated deploy
-    ///
-    /// Offers slightly better speed when deploying new versions of an application
-    #[arg(long)]
-    skip_setup: bool,
 }
 
 #[derive(Clone)]
@@ -190,7 +185,6 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
         systemd_unit,
         caddyfile,
         out_dir: command.out_dir,
-        skip_setup: command.skip_setup,
         reserve_ports: config.network.reserve_ports,
     };
 

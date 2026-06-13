@@ -13,7 +13,6 @@ pub struct Deploy {
     pub systemd_unit: Option<TemplateAndExtraVars>,
     pub caddyfile: Option<TemplateAndExtraVars>,
     pub out_dir: PathBuf,
-    pub skip_setup: bool,
     pub reserve_ports: u32,
 }
 
@@ -25,13 +24,6 @@ impl Deploy {
             self.caddyfile.is_some(),
             self.systemd_unit.is_some(),
         );
-
-        if self.skip_setup {
-            context = context! {
-                SKIP_SETUP => true,
-                ..context,
-            };
-        }
 
         let out_dir_abs = path::absolute(&self.out_dir).unwrap();
         context = context! {
