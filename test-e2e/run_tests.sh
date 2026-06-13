@@ -104,7 +104,8 @@ pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/
 # Set secrets
 sudo incus exec vade-test-vm -- sh -c 'printf "AUTH_USERNAME=foo\nAUTH_PASSWORD=123\n" > /opt/vade/apps/my-guestbook/secrets'
 
-# Deploy
+# Deploy, after compiling
+just -f ../examples/guestbook/justfile compile
 cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.toml --out-dir ../examples/guestbook/vade-gen
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/deploy.py
 
@@ -126,7 +127,7 @@ assert_response_contains "Guestbook POST check" "$SIGN_MESSAGE" "$RESPONSE"
 # Goatcounter
 ###
 
-# Deploy
+# Deploy, after downloading
 cargo run -- deploy my-goatcounter --config ../examples/goatcounter/vade.toml --out-dir ../examples/goatcounter/vade-gen
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounter/vade-gen/deploy.py
 

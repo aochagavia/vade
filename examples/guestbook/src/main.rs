@@ -167,10 +167,11 @@ fn main() -> std::io::Result<()> {
         Ok(port) => port.parse::<u16>().unwrap(),
         Err(_) => 8080
     };
+
     rt.block_on(async move {
-        let ip = Ipv4Addr::new(0, 0, 0, 0);
-        let listener = tokio::net::TcpListener::bind(SocketAddrV4::new(ip, port)).await?;
-        println!("Listening on http://{}", listener.local_addr().unwrap());
+        let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
+        println!("Listening on http://{addr}");
+        let listener = tokio::net::TcpListener::bind(addr).await?;
         axum::serve(listener, app).await?;
         Ok(())
     })

@@ -1,3 +1,15 @@
+set lazy
+
+latest := `curl -s https://api.github.com/repos/arp242/goatcounter/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4`
+current := `cat artifacts/goatcounter.version 2>/dev/null || true`
+
+# Download goatcounter, unless we already have the latest release
 prepare-artifacts:
-    curl -s https://api.github.com/repos/arp242/goatcounter/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4 | xargs -I {} sh -c 'mkdir -p artifacts && curl -sL "https://github.com/arp242/goatcounter/releases/download/{}/goatcounter-{}-linux-amd64.gz" | gunzip > artifacts/goatcounter'
+    {{ if latest == current { "echo goatcounter " + latest + " already up to date" } else { "just _download " + latest } }}
+
+[private]
+_download tag:
+    mkdir -p artifacts
+    curl -sL "https://github.com/arp242/goatcounter/releases/download/{{tag}}/goatcounter-{{tag}}-linux-amd64.gz" | gunzip > artifacts/goatcounter
     chmod +x artifacts/goatcounter
+    echo "{{tag}}" > artifacts/goatcounter.version
