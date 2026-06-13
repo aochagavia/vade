@@ -1,20 +1,16 @@
 [Unit]
-Description={{ APP_NAME }} (web application)
+Description={{ APP_NAME }} (goatcounter deployment)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart={{ SYSTEMD_UNIT_EXEC_START }}
+ExecStart={{ APP_ACTIVE_ARTIFACTS_DIR }}/goatcounter serve -listen :8081
 WorkingDirectory={{ APP_HOME_DIR }}/storage
 Restart=on-failure
 RestartSec=5s
 User={{ APP_USERNAME }}
 Group={{ APP_USERNAME }}
-EnvironmentFile={{ APP_HOME_DIR }}/secrets
-{%- for env in extra_environments %}
-Environment="{{ env }}"
-{%- endfor %}
 
 # Restrict filesystem access
 PrivateTmp=true

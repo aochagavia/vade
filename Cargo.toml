@@ -2,6 +2,7 @@
 name = "vade-cli"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
 
 [[bin]]
 name = "vade"
@@ -9,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
-rootcause = "0.11.0"
+rootcause = "0.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
 minijinja = { version = "2.14.0", features = ["loader"] }
 toml = "1.1.2"

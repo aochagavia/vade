@@ -82,6 +82,18 @@ RESPONSE=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https:
 assert_response_contains "Static site check" "<h1>Hello World</h1>" "$RESPONSE"
 
 ###
+# Basic python demo app
+###
+
+# Deploy
+cargo run -- deploy my-python-no-deps --config ../examples/python-no-deps/vade.toml --out-dir ../examples/python-no-deps/vade-gen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/python-no-deps/vade-gen/deploy.py
+
+# Check
+RESPONSE=$(curl -fsSk --resolve python-site.example.com:443:"$VM_IP_ADDR" https://python-site.example.com/)
+assert_response_contains "Python demo site check" "Hello world" "$RESPONSE"
+
+###
 # Guestbook
 ###
 
@@ -109,3 +121,15 @@ curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" \
 
 RESPONSE=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
 assert_response_contains "Guestbook POST check" "$SIGN_MESSAGE" "$RESPONSE"
+
+###
+# Goatcounter
+###
+
+# Deploy
+cargo run -- deploy my-goatcounter --config ../examples/goatcounter/vade.toml --out-dir ../examples/goatcounter/vade-gen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounter/vade-gen/deploy.py
+
+# Check
+RESPONSE=$(curl -fsSk --resolve goats.example.com:443:"$VM_IP_ADDR" https://goats.example.com/)
+assert_response_contains "Goatcounter check" "<h1>Create your first site and user</h1>" "$RESPONSE"

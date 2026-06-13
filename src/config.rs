@@ -1,3 +1,4 @@
+use crate::templating::{APP_PORT_VAR, APP_PORTS_VAR};
 use crate::templating::{
     CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_APPLICATION, TemplateAndExtraVars,
 };
@@ -29,6 +30,9 @@ pub fn load(path: &Path, uses_default_config_path: bool) -> Result<ApplicationCo
 pub struct ApplicationConfig {
     /// Configuration related to the project's artifacts
     pub artifacts: ArtifactsConfig,
+    /// Configuration related to the network
+    #[serde(default)]
+    pub network: NetworkConfig,
     /// Configuration related to the project's Caddyfile (if any)
     pub caddyfile: Option<CaddyfileConfig>,
     /// Configuration related to the project's systemd unit (if any)
@@ -41,6 +45,14 @@ pub struct ArtifactsConfig {
     ///
     /// Note: this path is relative to the configuration file, not to the current working directory
     pub path: PathBuf,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct NetworkConfig {
+    /// The number of ports that vade should reserve for this application
+    #[serde(default)]
+    pub reserve_ports: u32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -69,6 +81,9 @@ pub struct GeneratedSystemdUnitConfig {
     pub template: String,
     /// The command that should be passed to the unit's `ExecStart=`
     pub exec_start: String,
+    /// Extra entries that should become part of the unit, each one in its own `Environment=` line
+    #[serde(default)]
+    pub extra_environment_entries: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -93,18 +108,21 @@ pub struct GeneratedCaddyfileConfig {
     template: String,
     /// Domains that Caddy will route to our application
     domains: Vec<String>,
-    /// The port where the application is listening (if any)
-    ///
-    /// TODO: find a way to get rid of this, so users don't have to care about ports
-    port: Option<u16>,
 }
 
 impl SystemdUnitConfig {
-    pub fn load_template(&self, config_parent_path: &Path) -> Result<TemplateAndExtraVars, Report> {
-        match self {
-            SystemdUnitConfig::Custom(custom) => custom.load_template(config_parent_path),
-            SystemdUnitConfig::Generated(generated) => generated.load_template(),
-        }
+    pub fn load_template(
+        &self,
+        config_parent_path: &Path,
+        network_config: &NetworkConfig,
+    ) -> Result<TemplateAndExtraVars, Report> {
+        let mut template = match self {
+            SystemdUnitConfig::Custom(custom) => custom.load_template(config_parent_path)?,
+            SystemdUnitConfig::Generated(generated) => generated.load_template(network_config)?,
+        };
+
+        inject_port_variables(&mut template.extra_vars, network_config);
+        Ok(template)
     }
 }
 
@@ -120,9 +138,20 @@ impl CustomSystemdUnitConfig {
 }
 
 impl GeneratedSystemdUnitConfig {
-    pub fn load_template(&self) -> Result<TemplateAndExtraVars, Report> {
+    pub fn load_template(
+        &self,
+        network_config: &NetworkConfig,
+    ) -> Result<TemplateAndExtraVars, Report> {
         let mut extra_template_vars = HashMap::new();
         extra_template_vars.insert("SYSTEMD_UNIT_EXEC_START", self.exec_start.clone().into());
+
+        let mut extra_environment_entries = self.extra_environment_entries.clone();
+        if network_config.reserve_ports > 0 {
+            extra_environment_entries.push(format!("PORT={{{{ {APP_PORT_VAR} }}}}"));
+            extra_environment_entries
+                .push(format!(r#"PORTS={{{{ {APP_PORTS_VAR} | join(",") }}}}"#));
+        }
+        extra_template_vars.insert("extra_environments", extra_environment_entries.into());
 
         match self.template.as_str() {
             "application" => Ok(TemplateAndExtraVars {
@@ -135,11 +164,18 @@ impl GeneratedSystemdUnitConfig {
 }
 
 impl CaddyfileConfig {
-    pub fn load_template(&self, config_parent_path: &Path) -> Result<TemplateAndExtraVars, Report> {
-        match self {
-            CaddyfileConfig::Custom(custom) => custom.load_template(config_parent_path),
-            CaddyfileConfig::Generated(generated) => generated.load_template(),
-        }
+    pub fn load_template(
+        &self,
+        config_parent_path: &Path,
+        network_config: &NetworkConfig,
+    ) -> Result<TemplateAndExtraVars, Report> {
+        let mut template = match self {
+            CaddyfileConfig::Custom(custom) => custom.load_template(config_parent_path)?,
+            CaddyfileConfig::Generated(generated) => generated.load_template()?,
+        };
+
+        inject_port_variables(&mut template.extra_vars, network_config);
+        Ok(template)
     }
 }
 
@@ -159,10 +195,6 @@ impl GeneratedCaddyfileConfig {
         let mut extra_template_vars = HashMap::new();
         extra_template_vars.insert("CADDYFILE_DOMAINS", self.domains.clone().into());
 
-        if let Some(port) = self.port {
-            extra_template_vars.insert("CADDYFILE_PORT", port.into());
-        }
-
         match self.template.as_str() {
             "static-files" => Ok(TemplateAndExtraVars {
                 template: CADDYFILE_STATIC_FILES.into(),
@@ -175,4 +207,25 @@ impl GeneratedCaddyfileConfig {
             _ => bail!("invalid caddyfile template: {}", self.template),
         }
     }
+}
+
+fn inject_port_variables(
+    extra_vars: &mut HashMap<&'static str, minijinja::Value>,
+    network_config: &NetworkConfig,
+) {
+    if network_config.reserve_ports > 0 {
+        // This variable resolves to itself, so the rendered file still has an `APP_PORT`
+        // variable in it that can be replaced at deploy time on the server (we usually don't know
+        // the port number before that moment).
+        extra_vars.insert(APP_PORT_VAR, format!("{{{{ {APP_PORT_VAR} }}}}").into());
+    }
+
+    // In case the application reserves more than one port, template writers can use
+    // `{{ APP_PORTS[i] }}` to refer to each one. Similar to `APP_PORT`, the variable will resolve
+    // to itself and will be replaced at deploy time.
+    let mut values = Vec::with_capacity(network_config.reserve_ports as usize);
+    for i in 0..network_config.reserve_ports {
+        values.push(format!("{{{{ {APP_PORTS_VAR}[{i}] }}}}"));
+    }
+    extra_vars.insert(APP_PORTS_VAR, values.into());
 }

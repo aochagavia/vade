@@ -175,11 +175,11 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
     // Load files if available
     let caddyfile = config
         .caddyfile
-        .map(|c| c.load_template(config_parent_path))
+        .map(|c| c.load_template(config_parent_path, &config.network))
         .transpose()?;
     let systemd_unit = config
         .systemd_unit
-        .map(|c| c.load_template(config_parent_path))
+        .map(|c| c.load_template(config_parent_path, &config.network))
         .transpose()?;
 
     let deploy = deploy::Deploy {
@@ -191,6 +191,7 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
         caddyfile,
         out_dir: command.out_dir,
         skip_setup: command.skip_setup,
+        reserve_ports: config.network.reserve_ports,
     };
 
     deploy.execute()

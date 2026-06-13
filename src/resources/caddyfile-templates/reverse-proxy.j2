@@ -1,3 +1,3 @@
 {{ CADDYFILE_DOMAINS | join(", ") }} {
-    reverse_proxy localhost:{{ CADDYFILE_PORT }}
+    reverse_proxy localhost:{{ APP_PORT }}
 }

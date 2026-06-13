@@ -6,8 +6,8 @@ reserve-ports = 1
 
 [systemd-unit.generated]
 template = "application"
-exec-start = "python3 {{ APP_ACTIVE_ARTIFACTS_DIR }}/main.py"
+exec-start = "{{ APP_ACTIVE_ARTIFACTS_DIR }}/goatcounter serve -listen :{{ APP_PORT }}"
 
 [caddyfile.generated]
 template = "reverse-proxy"
-domains = ["python-site.example.com"]
+domains = ["goats.example.com"]

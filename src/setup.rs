@@ -1,5 +1,6 @@
+use minijinja::context;
 use rootcause::{Report, prelude::ResultExt};
-use std::{fs, path::PathBuf};
+use std::{fs, path, path::PathBuf};
 
 use crate::{
     ApplicationMetadata,
@@ -20,8 +21,13 @@ impl Setup {
             )
         })?;
 
+        let out_dir_abs = path::absolute(&self.out_dir).unwrap();
         let context =
             templating::base_minijinja_context(&self.application_meta, false, false, false);
+        let context = context! {
+            LOCAL_RESERVE_PORTS_SCRIPT => out_dir_abs.join("reserve-ports.py").to_string_lossy(),
+            ..context,
+        };
         let mut env = templating::base_minijinja_env()?;
 
         // Write the pyinfra deploy
@@ -37,6 +43,11 @@ impl Setup {
         fs::write(self.out_dir.join("setup.py"), deploy)
             .context("failed to write pyinfra deploy")?;
 
+        fs::write(self.out_dir.join("reserve-ports.py"), RESERVE_PORTS_SCRIPT)
+            .context("failed to write port-reservation script")?;
+
         Ok(())
     }
 }
+
+pub static RESERVE_PORTS_SCRIPT: &str = include_str!("resources/scripts/reserve-ports.py");

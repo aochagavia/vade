@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{self, PathBuf};
 
 use crate::templating::{DEPLOY_PLAYBOOK_TEMPLATE, TemplateAndExtraVars};
-use crate::{ApplicationMetadata, templating};
+use crate::{ApplicationMetadata, setup, templating};
 
 pub struct Deploy {
     pub application_meta: ApplicationMetadata,
@@ -14,6 +14,7 @@ pub struct Deploy {
     pub caddyfile: Option<TemplateAndExtraVars>,
     pub out_dir: PathBuf,
     pub skip_setup: bool,
+    pub reserve_ports: u32,
 }
 
 impl Deploy {
@@ -33,6 +34,12 @@ impl Deploy {
         }
 
         let out_dir_abs = path::absolute(&self.out_dir).unwrap();
+        context = context! {
+            APP_RESERVE_PORTS => self.reserve_ports,
+            LOCAL_RESERVE_PORTS_SCRIPT => out_dir_abs.join("reserve-ports.py").to_string_lossy(),
+            ..context,
+        };
+
         if let Some(artifacts_dir) = &self.artifacts_dir {
             context = context! {
                 LOCAL_ARTIFACTS_DIR => path::absolute(artifacts_dir).unwrap().to_string_lossy(),
@@ -109,6 +116,12 @@ impl Deploy {
 
         fs::write(self.out_dir.join("deploy.py"), deploy)
             .context("failed to write pyinfra deploy")?;
+
+        fs::write(
+            self.out_dir.join("reserve-ports.py"),
+            setup::RESERVE_PORTS_SCRIPT,
+        )
+        .context("failed to write port-reservation script")?;
 
         if let Some(systemd_unit) = systemd_unit_rendered {
             fs::write(self.out_dir.join("app.service"), systemd_unit)

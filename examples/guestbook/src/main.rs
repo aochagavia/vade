@@ -163,14 +163,12 @@ fn main() -> std::io::Result<()> {
         .enable_all()
         .build()?;
 
-    let randomize_port = env::var("RANDOMIZE_PORT");
+    let port = match env::var("PORT") {
+        Ok(port) => port.parse::<u16>().unwrap(),
+        Err(_) => 8080
+    };
     rt.block_on(async move {
         let ip = Ipv4Addr::new(0, 0, 0, 0);
-        let port = if randomize_port.is_ok() {
-            0
-        } else {
-            8000
-        };
         let listener = tokio::net::TcpListener::bind(SocketAddrV4::new(ip, port)).await?;
         println!("Listening on http://{}", listener.local_addr().unwrap());
         axum::serve(listener, app).await?;
