@@ -62,13 +62,13 @@ pub fn render(
     template_name: &'static str,
     template: Cow<'static, str>,
 ) -> Result<String, Report> {
+    const MAX_ITERATIONS: usize = 10;
+
     // We re-render the results of the previous render until we reach a fixpoint. This is to allow
     // for using variables inside other jinja variables.
     let mut template_string = template.to_string();
-    let mut i = 0;
-    loop {
+    for i in 0..MAX_ITERATIONS {
         let template_name = format!("{template_name}{i}");
-        i += 1;
         env.add_template_owned(template_name.clone(), template_string.clone())?;
 
         // safety: we just added the template to the environment
@@ -93,6 +93,10 @@ pub fn render(
             template_string = rendered;
         }
     }
+
+    bail!(
+        "failed to reach a stable rendering of the template after {MAX_ITERATIONS} iterations, did you accidentally introduce infinite recursion in your template variables?"
+    );
 }
 
 // Variable names
