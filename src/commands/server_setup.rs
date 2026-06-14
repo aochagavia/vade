@@ -1,19 +1,17 @@
+use crate::templating;
+use crate::templating::SERVER_SETUP_TEMPLATE;
 use minijinja::context;
-use rootcause::{Report, prelude::ResultExt};
-use std::{fs, path, path::PathBuf};
+use rootcause::Report;
+use rootcause::prelude::ResultExt;
+use std::path::PathBuf;
+use std::{fs, path};
 
-use crate::{
-    ApplicationMetadata,
-    templating::{self, SETUP_PLAYBOOK_TEMPLATE},
-};
-
-pub(crate) struct Setup {
-    pub(crate) application_meta: ApplicationMetadata,
-    pub(crate) out_dir: PathBuf,
+pub struct ServerSetup {
+    pub out_dir: PathBuf,
 }
 
-impl Setup {
-    pub(crate) fn execute(self) -> Result<(), Report> {
+impl ServerSetup {
+    pub fn execute(self) -> Result<(), Report> {
         fs::create_dir_all(&self.out_dir).context_with(|| {
             format!(
                 "failed to create output directory at `{}`",
@@ -21,26 +19,26 @@ impl Setup {
             )
         })?;
 
+        let mut context = templating::base_minijinja_context(None, false, false, false);
+        let mut env = templating::base_minijinja_env()?;
+
         let out_dir_abs = path::absolute(&self.out_dir).unwrap();
-        let context =
-            templating::base_minijinja_context(&self.application_meta, false, false, false);
-        let context = context! {
+        context = context! {
             LOCAL_RESERVE_PORTS_SCRIPT => out_dir_abs.join("reserve-ports.py").to_string_lossy(),
             ..context,
         };
-        let mut env = templating::base_minijinja_env()?;
 
         // Write the pyinfra deploy
         // safety: the template is always valid
-        let deploy = templating::render(
+        let server_setup = templating::render(
             &mut env,
             &context,
-            "setup.py.j2",
-            SETUP_PLAYBOOK_TEMPLATE.into(),
+            "server-setup.py.j2",
+            SERVER_SETUP_TEMPLATE.into(),
         )
         .unwrap();
 
-        fs::write(self.out_dir.join("setup.py"), deploy)
+        fs::write(self.out_dir.join("execute.py"), server_setup)
             .context("failed to write pyinfra deploy")?;
 
         fs::write(self.out_dir.join("reserve-ports.py"), RESERVE_PORTS_SCRIPT)
@@ -50,4 +48,4 @@ impl Setup {
     }
 }
 
-pub static RESERVE_PORTS_SCRIPT: &str = include_str!("resources/scripts/reserve-ports.py");
+pub static RESERVE_PORTS_SCRIPT: &str = include_str!("../resources/scripts/reserve-ports.py");

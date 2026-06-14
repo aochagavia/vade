@@ -4,8 +4,8 @@ use rootcause::prelude::ResultExt;
 use std::fs;
 use std::path::{self, PathBuf};
 
-use crate::templating::{DEPLOY_PLAYBOOK_TEMPLATE, TemplateAndExtraVars};
-use crate::{ApplicationMetadata, setup, templating};
+use crate::templating;
+use crate::templating::{ApplicationMetadata, DEPLOY_TEMPLATE, TemplateAndExtraVars};
 
 pub struct Deploy {
     pub application_meta: ApplicationMetadata,
@@ -19,7 +19,7 @@ pub struct Deploy {
 impl Deploy {
     fn get_minijinja_context(&self) -> minijinja::Value {
         let mut context = templating::base_minijinja_context(
-            &self.application_meta,
+            Some(&self.application_meta),
             self.artifacts_dir.is_some(),
             self.caddyfile.is_some(),
             self.systemd_unit.is_some(),
@@ -98,22 +98,11 @@ impl Deploy {
 
         // Write the pyinfra deploy
         // safety: the template is always valid
-        let deploy = templating::render(
-            &mut env,
-            &context,
-            "deploy.py.j2",
-            DEPLOY_PLAYBOOK_TEMPLATE.into(),
-        )
-        .unwrap();
+        let deploy =
+            templating::render(&mut env, &context, "deploy.py.j2", DEPLOY_TEMPLATE.into()).unwrap();
 
-        fs::write(self.out_dir.join("deploy.py"), deploy)
+        fs::write(self.out_dir.join("execute.py"), deploy)
             .context("failed to write pyinfra deploy")?;
-
-        fs::write(
-            self.out_dir.join("reserve-ports.py"),
-            setup::RESERVE_PORTS_SCRIPT,
-        )
-        .context("failed to write port-reservation script")?;
 
         if let Some(systemd_unit) = systemd_unit_rendered {
             fs::write(self.out_dir.join("app.service"), systemd_unit)

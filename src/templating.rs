@@ -1,4 +1,4 @@
-use crate::ApplicationMetadata;
+use crate::application_name::ApplicationName;
 use minijinja::{Environment, Template, UndefinedBehavior, context};
 use rootcause::{Report, bail};
 use serde::de::Error;
@@ -12,18 +12,23 @@ pub struct TemplateAndExtraVars {
 }
 
 pub fn base_minijinja_context(
-    app_meta: &ApplicationMetadata,
+    app_meta: Option<&ApplicationMetadata>,
     has_artifacts: bool,
     has_caddyfile: bool,
     has_systemd_unit: bool,
 ) -> minijinja::Value {
+    let base_context = context!(
+        VADE_RESERVE_PORTS_SCRIPT => "/opt/vade/scripts/reserve-ports.py",
+    );
+
+    let Some(app_meta) = app_meta else {
+        return base_context;
+    };
+
     context!(
         APP_NAME => app_meta.name(),
         APP_USERNAME => app_meta.username(),
         APP_HOME_DIR => app_meta.home_dir(),
-        APP_HAS_ARTIFACTS => has_artifacts,
-        APP_HAS_CADDYFILE => has_caddyfile,
-        APP_HAS_SYSTEMD_UNIT => has_systemd_unit,
         APP_SECRETS_FILE => format!("{}/secrets", app_meta.home_dir()),
         APP_STORAGE_DIR => format!("{}/storage", app_meta.home_dir()),
         APP_SYSTEMD_UNIT_FILE => format!("/etc/systemd/system/{}", app_meta.systemd_unit_name()),
@@ -33,7 +38,10 @@ pub fn base_minijinja_context(
         APP_CANDIDATE_DEPLOYMENT_DIR => format!("{}/candidate-deployment", app_meta.home_dir()),
         VADE_SYSTEM_USER_FILE => format!("/opt/vade/system_users/{}", app_meta.username()),
         VADE_SYSTEMD_UNIT_FILE => format!("/opt/vade/systemd_units/{}", app_meta.systemd_unit_name()),
-        VADE_RESERVE_PORTS_SCRIPT => "/opt/vade/scripts/reserve-ports.py",
+        APP_HAS_ARTIFACTS => has_artifacts,
+        APP_HAS_CADDYFILE => has_caddyfile,
+        APP_HAS_SYSTEMD_UNIT => has_systemd_unit,
+        ..base_context
     )
 }
 
@@ -42,7 +50,7 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     env.set_undefined_behavior(UndefinedBehavior::Strict);
     env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)?;
     env.add_template_owned("header.py.j2", HEADER_TEMPLATE)?;
-    env.add_template_owned("setup-tasks.py.j2", SETUP_TASKS_TEMPLATE)?;
+    env.add_template_owned("create-tasks.py.j2", SETUP_TASKS_TEMPLATE)?;
     env.add_template_owned("deploy-tasks.py.j2", DEPLOY_TASKS_TEMPLATE)?;
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
@@ -99,10 +107,6 @@ pub fn render(
     );
 }
 
-// Variable names
-pub const APP_PORT_VAR: &str = "APP_PORT";
-pub const APP_PORTS_VAR: &str = "APP_PORTS";
-
 fn explain_known_missing_vars(
     template: &Template,
     context: &minijinja::Value,
@@ -135,6 +139,36 @@ fn explain_known_missing_vars(
     None
 }
 
+pub struct ApplicationMetadata {
+    name: ApplicationName,
+}
+
+impl ApplicationMetadata {
+    pub fn new(name: ApplicationName) -> Self {
+        Self { name }
+    }
+
+    fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    fn username(&self) -> &str {
+        self.name.as_str()
+    }
+
+    fn systemd_unit_name(&self) -> String {
+        format!("{}.service", self.name())
+    }
+
+    fn home_dir(&self) -> String {
+        format!("/opt/vade/apps/{}", self.name)
+    }
+}
+
+// Variable names
+pub const APP_PORT_VAR: &str = "APP_PORT";
+pub const APP_PORTS_VAR: &str = "APP_PORTS";
+
 // Caddyfile templates
 pub static CADDYFILE_STATIC_FILES: &str =
     include_str!("resources/caddyfile-templates/static-files.j2");
@@ -147,12 +181,13 @@ pub static SYSTEMD_APPLICATION: &str =
 
 // Building blocks
 static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/header.py.j2");
-static SETUP_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/setup-tasks.py.j2");
+static SETUP_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/create-tasks.py.j2");
 static DEPLOY_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/deploy-tasks.py.j2");
 static PROMOTE_SCRIPT_TEMPLATE: &str =
     include_str!("resources/pyinfra-templates/deploy-promote.sh.j2");
 
 // Full deploys
-pub static DEPLOY_PLAYBOOK_TEMPLATE: &str =
-    include_str!("resources/pyinfra-templates/deploy.py.j2");
-pub static SETUP_PLAYBOOK_TEMPLATE: &str = include_str!("resources/pyinfra-templates/setup.py.j2");
+pub static DEPLOY_TEMPLATE: &str = include_str!("resources/pyinfra-templates/deploy.py.j2");
+pub static CREATE_TEMPLATE: &str = include_str!("resources/pyinfra-templates/create.py.j2");
+pub static SERVER_SETUP_TEMPLATE: &str =
+    include_str!("resources/pyinfra-templates/server-setup.py.j2");

@@ -1,0 +1,18 @@
+{% include "header.py.j2" %}
+
+files.directory(
+    name="Ensure vade scripts directory exists",
+    path="{{ VADE_RESERVE_PORTS_SCRIPT | dirname }}",
+    user="root",
+    group="root",
+    mode="755",
+)
+
+files.put(
+    name="Install the port-reservation script",
+    src="{{ LOCAL_RESERVE_PORTS_SCRIPT }}",
+    dest="{{ VADE_RESERVE_PORTS_SCRIPT }}",
+    user="root",
+    group="root",
+    mode="755",
+)

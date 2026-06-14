@@ -70,12 +70,19 @@ if [[ "$REUSE_VM" == false ]]; then
 fi
 
 ###
+# Vade setup
+###
+
+cargo run -- server-setup --out-dir ./vadegen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ./vadegen/execute.py
+
+###
 # Static website
 ###
 
 # Deploy
 cargo run -- deploy my-static-site --config ../examples/static-site/vade.toml --out-dir ../examples/static-site/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vade-gen/deploy.py
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vade-gen/execute.py
 
 # Check
 RESPONSE=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)
@@ -87,7 +94,7 @@ assert_response_contains "Static site check" "<h1>Hello World</h1>" "$RESPONSE"
 
 # Deploy
 cargo run -- deploy my-python-no-deps --config ../examples/python-no-deps/vade.toml --out-dir ../examples/python-no-deps/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/python-no-deps/vade-gen/deploy.py
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/python-no-deps/vade-gen/execute.py
 
 # Check
 RESPONSE=$(curl -fsSk --resolve python-site.example.com:443:"$VM_IP_ADDR" https://python-site.example.com/)
@@ -97,9 +104,9 @@ assert_response_contains "Python demo site check" "Hello world" "$RESPONSE"
 # Guestbook
 ###
 
-# Setup
-cargo run -- setup my-guestbook --out-dir ../examples/guestbook/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/setup.py
+# Create
+cargo run -- create my-guestbook --out-dir ../examples/guestbook/vade-gen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/execute.py
 
 # Set secrets
 sudo incus exec vade-test-vm -- sh -c 'printf "AUTH_USERNAME=foo\nAUTH_PASSWORD=123\n" > /opt/vade/apps/my-guestbook/secrets'
@@ -107,7 +114,7 @@ sudo incus exec vade-test-vm -- sh -c 'printf "AUTH_USERNAME=foo\nAUTH_PASSWORD=
 # Deploy, after compiling
 just -f ../examples/guestbook/justfile compile
 cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.toml --out-dir ../examples/guestbook/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/deploy.py
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/execute.py
 
 # Check GET
 RESPONSE=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
@@ -129,7 +136,7 @@ assert_response_contains "Guestbook POST check" "$SIGN_MESSAGE" "$RESPONSE"
 
 # Deploy, after downloading
 cargo run -- deploy my-goatcounter --config ../examples/goatcounter/vade.toml --out-dir ../examples/goatcounter/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounter/vade-gen/deploy.py
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounter/vade-gen/execute.py
 
 # Check
 RESPONSE=$(curl -fsSk --resolve goats.example.com:443:"$VM_IP_ADDR" https://goats.example.com/)
