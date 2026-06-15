@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart={{ SYSTEMD_UNIT_EXEC_START }}
+ExecStart={{ vars.exec_start }}
 WorkingDirectory={{ APP_HOME_DIR }}/storage
 Restart=on-failure
 RestartSec=5s

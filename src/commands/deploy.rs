@@ -70,10 +70,11 @@ impl Deploy {
         let systemd_unit_rendered = self
             .systemd_unit
             .map(|systemd_unit| {
-                let context = context! {
+                let context = context!(
+                    vars => systemd_unit.user_vars,
                     ..context.clone(),
-                    ..systemd_unit.extra_vars
-                };
+                );
+                let context = context!(..context, ..systemd_unit.system_vars,);
                 templating::render(
                     &mut env,
                     &context,
@@ -88,9 +89,10 @@ impl Deploy {
             .caddyfile
             .map(|caddyfile| {
                 let context = context! {
+                    vars => caddyfile.user_vars,
                     ..context.clone(),
-                    ..caddyfile.extra_vars
                 };
+                let context = context!(..context, ..caddyfile.system_vars,);
                 templating::render(&mut env, &context, "caddyfile", caddyfile.template.into())
                     .context("invalid jinja2 template for Caddyfile")
             })

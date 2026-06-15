@@ -4,10 +4,15 @@ path = "artifacts"
 [network]
 reserve-ports = 1
 
-[systemd-unit]
-template = "builtin://application"
-exec-start = "{{ APP_ACTIVE_ARTIFACTS_DIR }}/goatcounter serve -listen :{{ APP_PORT }}"
+[[systemd-unit]]
+[systemd-unit.template]
+builtin = "webapp.service"
+vars = {
+  exec_start = "{{ APP_ACTIVE_ARTIFACTS_DIR }}/goatcounter serve -listen :{{ APP_PORT }}"
+}
 
-[caddyfile]
-template = "builtin://reverse-proxy"
-domains = ["goats.example.com"]
+[caddyfile.template]
+builtin = "reverse-proxy"
+vars = {
+  domains = ["goats.example.com"]
+}

@@ -8,7 +8,8 @@ use std::path::Path;
 
 pub struct TemplateAndExtraVars {
     pub template: String,
-    pub extra_vars: HashMap<&'static str, minijinja::Value>,
+    pub user_vars: HashMap<String, minijinja::Value>,
+    pub system_vars: HashMap<String, minijinja::Value>,
 }
 
 pub fn base_minijinja_context(
@@ -176,8 +177,8 @@ pub static CADDYFILE_REVERSE_PROXY: &str =
     include_str!("resources/caddyfile-templates/reverse-proxy.j2");
 
 // Systemd unit templates
-pub static SYSTEMD_APPLICATION: &str =
-    include_str!("resources/systemd-unit-templates/application.service.j2");
+pub static SYSTEMD_WEBAPP_SERVICE: &str =
+    include_str!("resources/systemd-unit-templates/webapp.service.j2");
 
 // Building blocks
 static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/header.py.j2");

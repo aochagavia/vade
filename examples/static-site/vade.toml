@@ -1,6 +1,8 @@
 [artifacts]
 path = "artifacts"
 
-[caddyfile]
-template = "builtin://static-files"
-domains = ["static-site.example.com"]
+[caddyfile.template]
+builtin = "static-files"
+vars = {
+  domains = ["static-site.example.com"]
+}

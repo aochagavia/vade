@@ -10,7 +10,7 @@ use clap::Parser;
 use cli::{Cli, Command, CreateCommand, DeployCommand};
 use commands::{create, deploy};
 use rootcause::prelude::ResultExt;
-use rootcause::{Report, report};
+use rootcause::{Report, bail, report};
 use std::fs;
 use std::path::{Path, PathBuf};
 use templating::ApplicationMetadata;
@@ -47,9 +47,15 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
     // safety: we know that config_path is a file, hence its path always has a parent
     let config_parent_path = config_path.parent().unwrap();
 
+    let artifacts_dir = config
+        .artifacts
+        .as_ref()
+        .map(|artifacts| resolve_relative_to(config_parent_path, &artifacts.path));
+
     // Sanity check artifacts dir
-    let artifacts_dir = resolve_relative_to(config_parent_path, &config.artifacts.path);
-    if !artifacts_dir.is_dir() {
+    if let Some(artifacts_dir) = &artifacts_dir
+        && !artifacts_dir.is_dir()
+    {
         return Err(report!(
             "the provided artifacts directory does not exist or is not a directory (check the path at `{}`)",
             artifacts_dir.display()
@@ -61,15 +67,21 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
         .caddyfile
         .map(|c| c.load_template(config_parent_path, &config.network))
         .transpose()?;
-    let systemd_unit = config
-        .systemd_unit
-        .map(|c| c.load_template(config_parent_path, &config.network))
-        .transpose()?;
+
+    // TODO: remove and handle multiple systemd units
+    if config.systemd_units.len() > 1 {
+        bail!("only a single systemd unit is allowed");
+    }
+
+    let mut systemd_units = Vec::new();
+    for c in config.systemd_units {
+        systemd_units.push(c.load_template(config_parent_path, &config.network)?);
+    }
 
     deploy::Deploy {
         application_meta: ApplicationMetadata::new(command.application_name),
-        artifacts_dir: Some(artifacts_dir),
-        systemd_unit,
+        artifacts_dir,
+        systemd_unit: systemd_units.pop(),
         caddyfile,
         out_dir: command.out_dir,
         reserve_ports: config.network.reserve_ports,

@@ -1,0 +1,28 @@
+[[systemd-unit]]
+name = "main"
+enable = false
+
+[systemd-unit.template]
+inline = """
+[Unit]
+Description=Touches a file, demonstrating that the service ran to completion
+
+[Service]
+ExecStart=touch /tmp/a-new-file-is-born
+"""
+
+[[systemd-unit]]
+name = "my-timer"
+filename = "{{ vade.app.systemd_units['main'] }}.timer"
+
+[systemd-unit.template]
+inline = """
+[Timer]
+# Fires right after the timer is activated (e.g. on boot or `systemctl start`)
+OnActiveSec=0s
+# Then repeat every hour relative to the last time the service was activated
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target
+"""

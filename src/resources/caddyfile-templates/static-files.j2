@@ -1,4 +1,4 @@
-{{ CADDYFILE_DOMAINS | join(", ") }} {
+{{ vars.domains | join(", ") }} {
     root * {{ APP_ACTIVE_ARTIFACTS_DIR }}
     file_server
 }
