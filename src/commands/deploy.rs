@@ -5,13 +5,13 @@ use std::fs;
 use std::path::{self, PathBuf};
 
 use crate::templating;
-use crate::templating::{ApplicationMetadata, DEPLOY_TEMPLATE, TemplateAndExtraVars};
+use crate::templating::{ApplicationMetadata, DEPLOY_TEMPLATE, TemplateAndUserVars};
 
 pub struct Deploy {
     pub application_meta: ApplicationMetadata,
     pub artifacts_dir: Option<PathBuf>,
-    pub systemd_unit: Option<TemplateAndExtraVars>,
-    pub caddyfile: Option<TemplateAndExtraVars>,
+    pub systemd_unit: Option<TemplateAndUserVars>,
+    pub caddyfile: Option<TemplateAndUserVars>,
     pub out_dir: PathBuf,
     pub reserve_ports: u32,
 }
@@ -23,6 +23,7 @@ impl Deploy {
             self.artifacts_dir.is_some(),
             self.caddyfile.is_some(),
             self.systemd_unit.is_some(),
+            self.reserve_ports,
         );
 
         let out_dir_abs = path::absolute(&self.out_dir).unwrap();
@@ -74,7 +75,6 @@ impl Deploy {
                     vars => systemd_unit.user_vars,
                     ..context.clone(),
                 );
-                let context = context!(..context, ..systemd_unit.system_vars,);
                 templating::render(
                     &mut env,
                     &context,
@@ -92,7 +92,6 @@ impl Deploy {
                     vars => caddyfile.user_vars,
                     ..context.clone(),
                 };
-                let context = context!(..context, ..caddyfile.system_vars,);
                 templating::render(&mut env, &context, "caddyfile", caddyfile.template.into())
                     .context("invalid jinja2 template for Caddyfile")
             })

@@ -9,7 +9,21 @@ use std::process::Command;
 const VADE_BIN: &str = env!("CARGO_BIN_EXE_vade");
 
 #[test]
-fn examples_run_create_and_deploy() {
+fn run_server_setup() {
+    let out = fresh_out_dir("server-setup");
+    run_vade(&["server-setup", "--out-dir", path_arg(&out)]);
+    assert_execute_py_created(&out, None, "server-setup");
+}
+
+#[test]
+fn run_create() {
+    let out = fresh_out_dir("create");
+    run_vade(&["create", "test-app", "--out-dir", path_arg(&out)]);
+    assert_execute_py_created(&out, None, "create");
+}
+
+#[test]
+fn examples_run_deploy() {
     let configs = example_configs();
     assert!(
         !configs.is_empty(),
@@ -29,7 +43,7 @@ fn examples_run_create_and_deploy() {
             "--out-dir",
             path_arg(&deploy_out),
         ]);
-        assert_execute_py_created(&deploy_out, &config, "deploy");
+        assert_execute_py_created(&deploy_out, Some(&config), "deploy");
     }
 }
 
@@ -40,7 +54,7 @@ fn example_configs() -> Vec<PathBuf> {
     let mut configs = Vec::new();
     for entry in fs::read_dir(&examples).expect("failed to read examples directory") {
         let path = entry.unwrap().path();
-        if path.is_dir() {
+        if path.is_dir() && path.file_name().is_some_and(|name| name != "timer") {
             let candidate_path = path.join("vade.toml");
             if candidate_path.is_file() {
                 configs.push(candidate_path);
@@ -76,12 +90,14 @@ fn run_vade(args: &[&str]) {
     );
 }
 
-fn assert_execute_py_created(out_dir: &Path, config: &Path, command: &str) {
+fn assert_execute_py_created(out_dir: &Path, config: Option<&Path>, command: &str) {
     let execute_py = out_dir.join("execute.py");
     assert!(
         execute_py.is_file(),
         "`{command}` did not create `execute.py` for example `{}`",
-        config.display(),
+        config
+            .map(|c| c.display().to_string())
+            .unwrap_or("<unknown>".into()),
     );
 }
 

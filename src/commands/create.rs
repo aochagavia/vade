@@ -18,8 +18,13 @@ impl Create {
             )
         })?;
 
-        let context =
-            templating::base_minijinja_context(Some(&self.application_meta), false, false, false);
+        let context = templating::base_minijinja_context(
+            Some(&self.application_meta),
+            false,
+            false,
+            false,
+            0,
+        );
         let mut env = templating::base_minijinja_env()?;
 
         // Write the pyinfra deploy

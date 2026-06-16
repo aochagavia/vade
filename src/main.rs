@@ -65,7 +65,7 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
     // Load files if available
     let caddyfile = config
         .caddyfile
-        .map(|c| c.load_template(config_parent_path, &config.network))
+        .map(|c| c.load_template(config_parent_path))
         .transpose()?;
 
     // TODO: remove and handle multiple systemd units

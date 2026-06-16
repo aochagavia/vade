@@ -6,10 +6,9 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-pub struct TemplateAndExtraVars {
+pub struct TemplateAndUserVars {
     pub template: String,
     pub user_vars: HashMap<String, minijinja::Value>,
-    pub system_vars: HashMap<String, minijinja::Value>,
 }
 
 pub fn base_minijinja_context(
@@ -17,14 +16,30 @@ pub fn base_minijinja_context(
     has_artifacts: bool,
     has_caddyfile: bool,
     has_systemd_unit: bool,
+    reserved_ports: u32,
 ) -> minijinja::Value {
-    let base_context = context!(
+    let mut context = context!(
         VADE_RESERVE_PORTS_SCRIPT => "/opt/vade/scripts/reserve-ports.py",
     );
 
     let Some(app_meta) = app_meta else {
-        return base_context;
+        return context;
     };
+
+    if reserved_ports > 0 {
+        // APP_PORT and APP_PORTS[i] resolve to themselves, so the rendered files still have them
+        // after rendering. That way, the variable can be replaced at deploy time on the server (we
+        // usually don't know the port number before that moment).
+        let app_ports_values: Vec<_> = (0..reserved_ports)
+            .map(|i| format!("{{{{ APP_PORTS[{i}] }}}}"))
+            .collect();
+
+        context = context!(
+            APP_PORT => "{{ APP_PORT }}",
+            APP_PORTS => app_ports_values,
+            ..context
+        );
+    }
 
     context!(
         APP_NAME => app_meta.name(),
@@ -42,7 +57,7 @@ pub fn base_minijinja_context(
         APP_HAS_ARTIFACTS => has_artifacts,
         APP_HAS_CADDYFILE => has_caddyfile,
         APP_HAS_SYSTEMD_UNIT => has_systemd_unit,
-        ..base_context
+        ..context
     )
 }
 

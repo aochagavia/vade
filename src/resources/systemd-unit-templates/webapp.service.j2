@@ -12,9 +12,15 @@ RestartSec=5s
 User={{ APP_USERNAME }}
 Group={{ APP_USERNAME }}
 EnvironmentFile={{ APP_HOME_DIR }}/secrets
-{%- for env in extra_environments %}
-Environment="{{ env }}"
+{%- if APP_PORTS is defined %}
+Environment="PORT={{ APP_PORTS[0] }}"
+Environment="PORTS={{ APP_PORTS | join(',') }}"
+{%- endif %}
+{%- if vars.extra_env_vars is defined %}
+{%- for key in vars.extra_env_vars %}
+Environment="{{ key }}={{ vars.extra_env_vars[key] }}"
 {%- endfor %}
+{%- endif %}
 
 # Restrict filesystem access
 PrivateTmp=true

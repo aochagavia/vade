@@ -4,9 +4,9 @@ import os
 class HelloWorldHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         api_key = os.environ.get('API_KEY', 'NOT_SET')
-        quoted_value = os.environ.get('QUOTED_VALUE', 'NOT_SET')
+        my_env_var = os.environ.get('MY_ENV_VAR', 'NOT_SET')
 
-        response = f'Hello world\nAPI_KEY: {api_key}\nQUOTED_VALUE: {quoted_value}'
+        response = f'Hello world\nAPI_KEY: {api_key}\nMY_ENV_VAR: {my_env_var}'
 
         self.send_response(200)
         self.send_header('Content-type', 'text/html')

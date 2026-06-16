@@ -19,7 +19,7 @@ impl ServerSetup {
             )
         })?;
 
-        let mut context = templating::base_minijinja_context(None, false, false, false);
+        let mut context = templating::base_minijinja_context(None, false, false, false, 0);
         let mut env = templating::base_minijinja_env()?;
 
         let out_dir_abs = path::absolute(&self.out_dir).unwrap();

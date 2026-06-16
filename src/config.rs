@@ -1,6 +1,6 @@
 use crate::templating::{APP_PORT_VAR, APP_PORTS_VAR};
 use crate::templating::{
-    CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE, TemplateAndExtraVars,
+    CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE, TemplateAndUserVars,
 };
 use crate::{read_file, resolve_relative_to};
 use rootcause::prelude::ResultExt;
@@ -152,7 +152,7 @@ impl SystemdUnitConfig {
         &self,
         config_parent_path: &Path,
         network_config: &NetworkConfig,
-    ) -> Result<TemplateAndExtraVars, Report> {
+    ) -> Result<TemplateAndUserVars, Report> {
         let template =
             self.template
                 .load_template(config_parent_path, "systemd unit", Self::get_builtin)?;
@@ -164,17 +164,9 @@ impl SystemdUnitConfig {
                 .push(format!(r#"PORTS={{{{ {APP_PORTS_VAR} | join(",") }}}}"#).into());
         }
 
-        let mut system_vars = HashMap::new();
-        system_vars.insert(
-            "extra_environments".to_string(),
-            minijinja::Value::from_iter(extra_environment_entries),
-        );
-        inject_port_variables(&mut system_vars, network_config);
-
-        Ok(TemplateAndExtraVars {
+        Ok(TemplateAndUserVars {
             template,
             user_vars: self.template.load_user_vars(),
-            system_vars,
         })
     }
 }
@@ -188,47 +180,16 @@ impl CaddyfileConfig {
         }
     }
 
-    pub fn load_template(
-        &self,
-        config_parent_path: &Path,
-        network_config: &NetworkConfig,
-    ) -> Result<TemplateAndExtraVars, Report> {
+    pub fn load_template(&self, config_parent_path: &Path) -> Result<TemplateAndUserVars, Report> {
         let template =
             self.template
                 .load_template(config_parent_path, "Caddyfile", Self::get_builtin)?;
-        let mut system_vars = HashMap::new();
-        inject_port_variables(&mut system_vars, network_config);
 
-        Ok(TemplateAndExtraVars {
+        Ok(TemplateAndUserVars {
             template,
             user_vars: self.template.load_user_vars(),
-            system_vars,
         })
     }
-}
-
-fn inject_port_variables(
-    extra_vars: &mut HashMap<String, minijinja::Value>,
-    network_config: &NetworkConfig,
-) {
-    if network_config.reserve_ports > 0 {
-        // This variable resolves to itself, so the rendered file still has an `APP_PORT`
-        // variable in it that can be replaced at deploy time on the server (we usually don't know
-        // the port number before that moment).
-        extra_vars.insert(
-            APP_PORT_VAR.to_string(),
-            format!("{{{{ {APP_PORT_VAR} }}}}").into(),
-        );
-    }
-
-    // In case the application reserves more than one port, template writers can use
-    // `{{ APP_PORTS[i] }}` to refer to each one. Similar to `APP_PORT`, the variable will resolve
-    // to itself and will be replaced at deploy time.
-    let mut values = Vec::with_capacity(network_config.reserve_ports as usize);
-    for i in 0..network_config.reserve_ports {
-        values.push(format!("{{{{ {APP_PORTS_VAR}[{i}] }}}}"));
-    }
-    extra_vars.insert(APP_PORTS_VAR.to_string(), values.into());
 }
 
 fn toml_to_minijinja(value: &toml::Value) -> minijinja::Value {

@@ -8,7 +8,10 @@ reserve-ports = 1
 [systemd-unit.template]
 builtin = "webapp.service"
 vars = {
-  exec_start = "python3 {{ APP_ACTIVE_ARTIFACTS_DIR }}/main.py"
+  exec_start = "python3 {{ APP_ACTIVE_ARTIFACTS_DIR }}/main.py",
+  extra_env_vars = {
+    "MY_ENV_VAR" = "42"
+  }
 }
 
 [caddyfile.template]
