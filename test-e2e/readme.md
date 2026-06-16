@@ -23,7 +23,10 @@ sudo ufw route allow out on incusbr0
 
 ## Running the tests
 
-`./run_tests.sh`
+```bash
+./run_tests.sh                    # full run against a fresh VM
+./run_tests.sh --reuse-vm         # full run, reusing the existing VM
+```
 
 ## Upcoming tests
 
