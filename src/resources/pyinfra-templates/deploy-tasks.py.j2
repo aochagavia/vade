@@ -1,3 +1,20 @@
+{%- if vade.app.systemd_units %}
+###
+# Sanity checks
+###
+
+{%- for unit in vade.app.systemd_units %}
+# This unit must not collide with a pre-existing, unmanaged unit file. If the installed
+# unit exists, the matching copy in our active deployment must exist too; otherwise the
+# installed unit is not ours.
+if host.get_fact(File, path="{{ unit.installed_path }}") and not host.get_fact(File, path="{{ unit.active_path }}"):
+    raise DeployError(
+        "Your application wants to install the systemd unit `{{ unit.name }}`, but "
+        "`{{ unit.installed_path }}` already exists and is not managed by vade. "
+        "If removing the existing unit is not possible, try using a different app name."
+    )
+{%- endfor %}
+{%- endif %}
 ###
 # Initialize deployment candidate
 ###

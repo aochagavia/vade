@@ -3,15 +3,25 @@ set -euo pipefail
 
 VM_NAME=vade-test-vm
 
-# By default we create a fresh VM and provision it from scratch. Passing
-# --reuse-vm skips VM creation and server setup, reusing the existing VM.
-REUSE_VM=false
-for arg in "$@"; do
-  case "$arg" in
-    --reuse-vm) REUSE_VM=true ;;
-    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
-  esac
-done
+# The tests we know how to run, in the order a full run executes them. Each
+# entry `foo-bar` maps to a `test_foo_bar` function defined below.
+ALL_TESTS=(static-site python-no-deps python-no-deps-overwrite guestbook guestbook-rollback goatcounter timer existing-user existing-systemd-unit invalid-systemd-unit invalid-caddyfile)
+
+usage() {
+  cat <<EOF
+Usage: $0 [--reuse-vm] [test...]
+
+By default we create a fresh VM, provision it from scratch, and run every
+test.
+
+Options:
+  Python demo overwrite-vm   Skip VM creation and server setup, reusing the existing VM
+  -h, --help   Show this help
+
+Available tests:
+  ${ALL_TESTS[*]}
+EOF
+}
 
 # Assert that a string is present in an HTTP response body, exiting the script otherwise.
 # Usage: assert_response_contains <check_name> <expected> <response>
@@ -29,6 +39,37 @@ assert_response_contains() {
     exit 1
   fi
 }
+
+###
+# Argument parsing
+###
+
+REUSE_VM=false
+SELECTED_TESTS=()
+for arg in "$@"; do
+  case "$arg" in
+    --reuse-vm) REUSE_VM=true ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "Unknown option: $arg" >&2; usage >&2; exit 1 ;;
+    *)
+      if [[ " ${ALL_TESTS[*]} " != *" $arg "* ]]; then
+        echo "Unknown test: $arg" >&2
+        usage >&2
+        exit 1
+      fi
+      SELECTED_TESTS+=("$arg")
+      ;;
+  esac
+done
+
+# No test names given means run them all, in their canonical order.
+if [[ ${#SELECTED_TESTS[@]} -eq 0 ]]; then
+  SELECTED_TESTS=("${ALL_TESTS[@]}")
+fi
+
+###
+# VM + server setup
+###
 
 if [[ "$REUSE_VM" == false ]]; then
   # Remove any VM left over from a previous run
@@ -77,82 +118,170 @@ cargo run -- server-setup --out-dir ./vadegen
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ./vadegen/execute.py
 
 ###
-# Static website
+# Tests
 ###
 
-# Deploy
-cargo run -- deploy my-static-site --config ../examples/static-site/vade.toml --out-dir ../examples/static-site/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vade-gen/execute.py
+test_static-site() {
+  # Deploy
+  cargo run -- deploy my-static-site --config ../examples/static-site/vade.toml --out-dir ../examples/static-site/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vadegen/execute.py
 
-# Check
-RESPONSE=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)
-assert_response_contains "Static site check" "<h1>Hello World</h1>" "$RESPONSE"
+  # Check
+  sleep 0.2
+  local response
+  response=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)
+  assert_response_contains "Static site check" "<h1>Hello World</h1>" "$response"
+}
+
+test_python-no-deps() {
+  # Deploy
+  cargo run -- deploy my-python-no-deps --config ../examples/python-no-deps/vade.toml --out-dir ../examples/python-no-deps/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/python-no-deps/vadegen/execute.py
+
+  # Check
+  sleep 0.2
+  local response
+  response=$(curl -fsSk --resolve python-site.example.com:443:"$VM_IP_ADDR" https://python-site.example.com/)
+  assert_response_contains "Python demo site check" "Hello world" "$response"
+}
+
+test_python-no-deps-overwrite() {
+  # Deploy the static site to the same app used by python-no-deps
+  # Note: we use `--set-json` to have the Caddyfile target `python-site.example.com`
+  cargo run -- deploy my-python-no-deps --config ../examples/static-site/vade.toml --out-dir ../examples/static-site/vadegen --set-json 'caddyfile.domains=["python-site.example.com"]'
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vadegen/execute.py
+
+  # Check
+  local response
+  response=$(curl -fsSk --resolve python-site.example.com:443:"$VM_IP_ADDR" https://python-site.example.com/)
+  assert_response_contains "Python demo overwrite check" "<h1>Hello World</h1>" "$response"
+}
+
+test_guestbook() {
+  # Create
+  cargo run -- create my-guestbook --out-dir ../examples/guestbook/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vadegen/execute.py
+
+  # Set secrets
+  sudo incus exec vade-test-vm -- sh -c 'printf "AUTH_USERNAME=foo\nAUTH_PASSWORD=123\n" > /opt/vade/apps/my-guestbook/secrets'
+
+  # Deploy, after compiling
+  just -f ../examples/guestbook/justfile compile
+  cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.toml --out-dir ../examples/guestbook/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vadegen/execute.py
+
+  # Check GET
+  sleep 0.2
+  local response
+  response=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
+  assert_response_contains "Guestbook GET check" '<h2>Sign the Guestbook:</h2>' "$response"
+
+  # Check POST + message is actually persisted
+  local sign_message
+  sign_message="Hello from the e2e test ($(date +%s)-$RANDOM)"
+  curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" \
+    --data-urlencode "name=E2E Tester" \
+    --data-urlencode "message=$sign_message" \
+    https://guestbook.example.com/sign > /dev/null
+
+  response=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
+  assert_response_contains "Guestbook POST check" "$sign_message" "$response"
+}
+
+test_guestbook-rollback() {
+  cargo run -- deploy my-guestbook --config resources/invalid-systemd-unit-vade.toml
+  echo "Expecting the following deployment to fail..."
+  if pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" "vadegen/execute.py"; then
+    echo "❌ Existing systemd unit check FAILED: deployment succeeded but should have been rejected."
+    exit 1
+  fi
+
+  # Check GET, which should still work because the new deployment rolled back
+  sleep 0.2
+  local response
+  response=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
+  assert_response_contains "Guestbook GET check" '<h2>Sign the Guestbook:</h2>' "$response"
+}
+
+test_goatcounter() {
+  # Deploy, after downloading
+  cargo run -- deploy my-goatcounter --config ../examples/goatcounter/vade.toml --out-dir ../examples/goatcounter/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounter/vadegen/execute.py
+
+  # Check
+  sleep 0.2
+  local response
+  response=$(curl -fsSk --resolve goats.example.com:443:"$VM_IP_ADDR" https://goats.example.com/)
+  assert_response_contains "Goatcounter check" "<h1>Create your first site and user</h1>" "$response"
+}
+
+test_timer() {
+  # Deploy
+  cargo run -- deploy my-timer --config ../examples/timer/vade.toml --out-dir ../examples/timer/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/timer/vadegen/execute.py
+
+  # Check
+  sleep 0.2
+  sudo incus exec vade-test-vm -- ls /tmp/my-timer-was-here
+}
+
+test_existing-user() {
+  # Attempt to deploy to `operator`, which would assume a vade-managed user called `operator`
+  cargo run -- deploy operator --config ../examples/timer/vade.toml --out-dir ../examples/timer/vadegen
+
+  # The deployment must be rejected
+  echo "Expecting the following deployment to fail..."
+  if pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" "../examples/timer/vadegen/execute.py"; then
+    echo "❌ Existing systemd unit check FAILED: deployment succeeded but should have been rejected."
+    exit 1
+  fi
+  echo "✅ Existing systemd unit check passed."
+}
+
+test_existing-systemd-unit() {
+  # Create an unmanaged unit file that collides with the one the app would install
+  sudo incus file push resources/dummy.service vade-test-vm/etc/systemd/system/my-amazing-app.service
+
+  # Attempt to deploy to `my-amazing-app`, which would try to install a `my-amazing-app.service` unit
+  cargo run -- deploy my-amazing-app --config ../examples/timer/vade.toml --out-dir ../examples/timer/vadegen
+
+  # The deployment must be rejected because `my-amazing-app.service` already exists and is
+  # not managed by vade
+  echo "Expecting the following deployment to fail..."
+  if pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" "../examples/timer/vadegen/execute.py"; then
+    echo "❌ Existing systemd unit check FAILED: deployment succeeded but should have been rejected."
+    exit 1
+  fi
+  echo "✅ Existing systemd unit check passed."
+}
+
+test_invalid-systemd-unit() {
+  cargo run -- deploy my-invalid-app --config resources/invalid-systemd-unit-vade.toml
+  echo "Expecting the following deployment to fail..."
+  if pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" "vadegen/execute.py"; then
+    echo "❌ Existing systemd unit check FAILED: deployment succeeded but should have been rejected."
+    exit 1
+  fi
+}
+
+test_invalid-caddyfile() {
+  cargo run -- deploy my-invalid-app --config resources/invalid-caddyfile-vade.toml
+  echo "Expecting the following deployment to fail..."
+  if pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" "vadegen/execute.py"; then
+    echo "❌ Existing systemd unit check FAILED: deployment succeeded but should have been rejected."
+    exit 1
+  fi
+}
 
 ###
-# Basic python demo app
+# Run the selected tests
 ###
 
-# Deploy
-cargo run -- deploy my-python-no-deps --config ../examples/python-no-deps/vade.toml --out-dir ../examples/python-no-deps/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/python-no-deps/vade-gen/execute.py
+for name in "${SELECTED_TESTS[@]}"; do
+  echo
+  echo "### Running test: $name ###"
+  "test_$name"
+done
 
-# Check
-sleep 0.2
-RESPONSE=$(curl -fsSk --resolve python-site.example.com:443:"$VM_IP_ADDR" https://python-site.example.com/)
-assert_response_contains "Python demo site check" "Hello world" "$RESPONSE"
-
-###
-# Guestbook
-###
-
-# Create
-cargo run -- create my-guestbook --out-dir ../examples/guestbook/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/execute.py
-
-# Set secrets
-sudo incus exec vade-test-vm -- sh -c 'printf "AUTH_USERNAME=foo\nAUTH_PASSWORD=123\n" > /opt/vade/apps/my-guestbook/secrets'
-
-# Deploy, after compiling
-just -f ../examples/guestbook/justfile compile
-cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.toml --out-dir ../examples/guestbook/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/execute.py
-
-# Check GET
-sleep 0.2
-RESPONSE=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
-assert_response_contains "Guestbook GET check" '<h2>Sign the Guestbook:</h2>' "$RESPONSE"
-
-# Check POST + message is actually persisted
-SIGN_MESSAGE="Hello from the e2e test ($(date +%s)-$RANDOM)"
-curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" \
-  --data-urlencode "name=E2E Tester" \
-  --data-urlencode "message=$SIGN_MESSAGE" \
-  https://guestbook.example.com/sign > /dev/null
-
-RESPONSE=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
-assert_response_contains "Guestbook POST check" "$SIGN_MESSAGE" "$RESPONSE"
-
-###
-# Goatcounter
-###
-
-# Deploy, after downloading
-cargo run -- deploy my-goatcounter --config ../examples/goatcounter/vade.toml --out-dir ../examples/goatcounter/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounter/vade-gen/execute.py
-
-# Check
-sleep 0.2
-RESPONSE=$(curl -fsSk --resolve goats.example.com:443:"$VM_IP_ADDR" https://goats.example.com/)
-assert_response_contains "Goatcounter check" "<h1>Create your first site and user</h1>" "$RESPONSE"
-
-###
-# Timers
-###
-
-# Deploy
-cargo run -- deploy my-timer --config ../examples/timer/vade.toml --out-dir ../examples/timer/vade-gen
-pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/timer/vade-gen/execute.py
-
-# Check
-sleep 0.2
-sudo incus exec vade-test-vm -- ls /tmp/my-timer-was-here
+echo
+echo "✅ All selected tests passed."

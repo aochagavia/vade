@@ -1,0 +1,11 @@
+[caddyfile.template]
+inline = """
+forbidden.example.com {
+    respond "Forbidden" 403
+}
+
+# Oh no, we have conflicting handlers!
+forbidden.example.com {
+    respond "Allowed" 200
+}
+"""

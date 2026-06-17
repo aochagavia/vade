@@ -1,0 +1,5 @@
+[[systemd-unit]]
+[systemd-unit.template]
+inline = """
+Trust me, I'm a systemd unit
+"""

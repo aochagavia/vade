@@ -1,0 +1,5 @@
+[Unit]
+Description=Touches a file, demonstrating that the service ran to completion
+
+[Service]
+ExecStart=touch /tmp/my-timer-was-here

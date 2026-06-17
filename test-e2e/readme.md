@@ -23,8 +23,9 @@ sudo ufw route allow out on incusbr0
 ## Running the tests
 
 ```bash
-./run_tests.sh              # full run, fresh VM
-./run_tests.sh --reuse-vm   # full run, reused VM
+./run_tests.sh                              # full run, fresh VM
+./run_tests.sh --reuse-vm                   # full run, reused VM
+./run_tests.sh --reuse-vm guestbook timer   # selection run, reused VM
 
 # We currently do not shut down the VM after testing, so you need to do that manually
 sudo incus delete --force vade-test-vm
@@ -32,9 +33,4 @@ sudo incus delete --force vade-test-vm
 
 ## Upcoming tests
 
-- Deploy static app on top of existing dynamic app replaces it and removes the systemd units from /etc/systemd/system
 - Nuke app removes it, leaving no traces (no user, no files, no stray systemd units).
-- Hardening:
-  - Try to deploy an application with the same name as an existing user that is not managed by vade (e.g., `operator`). Ensure the deployment fails with an appropriate error message.
-  - Install a systemd unit in the machine, then try to deploy an application that uses the same unit file name, ensure the deployment fails with an appropriate error message.
-  - Try to deploy invalid files: Caddyfile, unit file. Ensure the deployment fails with an appropriate error message. Ensure it rolls back to the previous deployment (make sure it exists, obviously).
