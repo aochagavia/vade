@@ -2,21 +2,23 @@
 # 1. # Tear down the original application
 ######
 
-# Stop, disable, and delete systemd unit if present
-if [ -f "{{ APP_SYSTEMD_UNIT_FILE }}" ]; then
-  systemctl is-active --quiet "{{ APP_NAME }}.service" && systemctl stop "{{ APP_NAME }}.service"
-  systemctl disable "{{ APP_NAME }}.service"
-  rm "{{ APP_SYSTEMD_UNIT_FILE }}"
+# Stop, disable, and delete systemd units if present
+{%- for unit in vade.app.systemd_units %}
+if [ -f "{{ unit.installed_path }}" ]; then
+  systemctl is-active --quiet "{{ vade.app.name }}.service" && systemctl stop "{{ vade.app.name }}.service"
+  systemctl disable "{{ vade.app.name }}.service"
+  rm "{{ unit.installed_path }}"
   systemctl daemon-reload
 fi
+{%- endfor %}
 
 # Downgrade or remove active deployment dir
 {% if downgraded_dir is defined %}
-if [ -d "{{ APP_ACTIVE_DEPLOYMENT_DIR }}" ]; then
-  mv "{{ APP_ACTIVE_DEPLOYMENT_DIR }}" "{{ downgraded_dir }}"
+if [ -d "{{ vade.app.paths.active_deployment }}" ]; then
+  mv "{{ vade.app.paths.active_deployment }}" "{{ downgraded_dir }}"
 fi
 {% else %}
-rm -rf "{{ APP_ACTIVE_DEPLOYMENT_DIR }}"
+rm -rf "{{ vade.app.paths.active_deployment }}"
 {% endif %}
 
 # Let Caddy know a previously deployed Caddyfile no longer exists
@@ -27,16 +29,18 @@ systemctl reload caddy
 ######
 
 # Promote source dir
-mv -T "{{ src_dir }}" "{{ APP_ACTIVE_DEPLOYMENT_DIR }}"
+mv -T "{{ src_dir }}" "{{ vade.app.paths.active_deployment }}"
 
-# Install, enable, and start a new systemd unit
-if [ -f "{{ APP_ACTIVE_DEPLOYMENT_DIR }}/app.service.backup" ]; then
-  cp "{{ APP_ACTIVE_DEPLOYMENT_DIR }}/app.service.backup" "{{ APP_SYSTEMD_UNIT_FILE }}"
-  chmod 0644 "{{ APP_SYSTEMD_UNIT_FILE }}"
-  chown root:root "{{ APP_SYSTEMD_UNIT_FILE }}"
+# Install, enable, and start systemd systemd units
+{%- for unit in vade.app.systemd_units %}
+if [ -f "{{ unit.active_path }}" ]; then
+  cp "{{ unit.active_path }}" "{{ unit.installed_path }}"
+  chmod 0644 "{{ unit.installed_path }}"
+  chown root:root "{{ unit.installed_path }}"
   systemctl daemon-reload
-  systemctl enable --now "{{ APP_NAME }}.service"
+  systemctl enable --now "{{ unit.name }}"
 fi
+{%- endfor %}
 
 # Let Caddy know a new Caddyfile might exist
 systemctl reload caddy

@@ -1,8 +1,8 @@
-use crate::templating::{APP_PORT_VAR, APP_PORTS_VAR};
+use crate::read_file;
 use crate::templating::{
     CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE, TemplateAndUserVars,
 };
-use crate::{read_file, resolve_relative_to};
+use crate::util::RelativePathResolver;
 use rootcause::prelude::ResultExt;
 use rootcause::{Report, report};
 use serde::{Deserialize, Serialize};
@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub fn load(path: &Path, uses_default_config_path: bool) -> Result<ApplicationConfig, Report> {
-    let config_kdl = fs::read_to_string(path).context_with(|| {
+pub fn load(path: &Path, uses_default_config_path: bool) -> Result<AppConfig, Report> {
+    let config_toml = fs::read_to_string(path).context_with(|| {
         let mut msg = format!("failed to load configuration file at `{}`", path.display());
         if uses_default_config_path {
             msg.push_str("\n\nno custom path was provided, so the default path was used... did you forget to specify a custom path?");
@@ -20,18 +20,18 @@ pub fn load(path: &Path, uses_default_config_path: bool) -> Result<ApplicationCo
         msg
     })?;
 
-    load_from_slice(&config_kdl)
+    load_from_slice(&config_toml)
 }
 
-fn load_from_slice(config_kdl: &str) -> Result<ApplicationConfig, Report> {
-    let config = toml::from_str(config_kdl).context("invalid application configuration")?;
+fn load_from_slice(config_toml: &str) -> Result<AppConfig, Report> {
+    let config = toml::from_str(config_toml).context("invalid application configuration")?;
     Ok(config)
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ApplicationConfig {
+pub struct AppConfig {
     /// Configuration related to the project's artifacts
     pub artifacts: Option<ArtifactsConfig>,
     /// Configuration related to the network
@@ -97,9 +97,9 @@ pub struct SystemdUnitConfig {
     ///
     /// This field can be omitted when there is a single systemd unit, but needs to be provided
     /// otherwise
-    name: Option<String>,
+    pub name: Option<String>,
     /// The template from which this systemd unit file will be rendered
-    template: TemplateConfig,
+    pub template: TemplateConfig,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -112,7 +112,7 @@ pub struct CaddyfileConfig {
 impl TemplateConfig {
     fn load_template(
         &self,
-        config_parent_path: &Path,
+        path_resolver: &RelativePathResolver,
         kind: &str,
         get_builtin: fn(&str) -> Option<&'static str>,
     ) -> Result<String, Report> {
@@ -123,7 +123,7 @@ impl TemplateConfig {
                 Ok(builtin.to_string())
             }
             TemplateSource::File(path) => {
-                let systemd_unit_path = resolve_relative_to(config_parent_path, path);
+                let systemd_unit_path = path_resolver.resolve(path);
                 Ok(read_file(&systemd_unit_path)?)
             }
             TemplateSource::Inline(s) => Ok(s.clone()),
@@ -150,19 +150,11 @@ impl SystemdUnitConfig {
 
     pub fn load_template(
         &self,
-        config_parent_path: &Path,
-        network_config: &NetworkConfig,
+        path_resolver: &RelativePathResolver,
     ) -> Result<TemplateAndUserVars, Report> {
         let template =
             self.template
-                .load_template(config_parent_path, "systemd unit", Self::get_builtin)?;
-
-        let mut extra_environment_entries: Vec<minijinja::Value> = Vec::new();
-        if network_config.reserve_ports > 0 {
-            extra_environment_entries.push(format!("PORT={{{{ {APP_PORT_VAR} }}}}").into());
-            extra_environment_entries
-                .push(format!(r#"PORTS={{{{ {APP_PORTS_VAR} | join(",") }}}}"#).into());
-        }
+                .load_template(path_resolver, "systemd unit", Self::get_builtin)?;
 
         Ok(TemplateAndUserVars {
             template,
@@ -180,10 +172,13 @@ impl CaddyfileConfig {
         }
     }
 
-    pub fn load_template(&self, config_parent_path: &Path) -> Result<TemplateAndUserVars, Report> {
+    pub fn load_template(
+        &self,
+        path_resolver: &RelativePathResolver,
+    ) -> Result<TemplateAndUserVars, Report> {
         let template =
             self.template
-                .load_template(config_parent_path, "Caddyfile", Self::get_builtin)?;
+                .load_template(path_resolver, "Caddyfile", Self::get_builtin)?;
 
         Ok(TemplateAndUserVars {
             template,

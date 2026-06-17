@@ -3,17 +3,10 @@
 ###
 
 # The application's username must not collide with a pre-existing, unmanaged user.
-if "{{ APP_USERNAME }}" in host.get_fact(Users) and not host.get_fact(File, path="{{ VADE_SYSTEM_USER_FILE }}"):
+if "{{ vade.app.username }}" in host.get_fact(Users) and not host.get_fact(File, path="{{ vade.app.paths.system_users_entry }}"):
     raise DeployError(
-        "Your application's name (`{{ APP_USERNAME }}`) conflicts with an existing user on the "
+        "Your application's name (`{{ vade.app.username }}`) conflicts with an existing user on the "
         "system. Please choose a different one and try again."
-    )
-
-# The application's systemd unit must not collide with a pre-existing, unmanaged unit.
-if host.get_fact(File, path="{{ APP_SYSTEMD_UNIT_FILE }}") and not host.get_fact(File, path="{{ VADE_SYSTEMD_UNIT_FILE }}"):
-    raise DeployError(
-        "Your application's name (`{{ APP_USERNAME }}`) conflicts with an existing systemd service "
-        "on the system. Please choose a different one and try again."
     )
 
 ###
@@ -22,7 +15,7 @@ if host.get_fact(File, path="{{ APP_SYSTEMD_UNIT_FILE }}") and not host.get_fact
 
 files.directory(
     name="Ensure vade user directory exists",
-    path="{{ VADE_SYSTEM_USER_FILE | dirname }}",
+    path="{{ vade.app.paths.system_users_entry | dirname }}",
     user="root",
     group="root",
     mode="755",
@@ -30,23 +23,7 @@ files.directory(
 
 files.file(
     name="Ensure app user is tracked",
-    path="{{ VADE_SYSTEM_USER_FILE }}",
-    user="root",
-    group="root",
-    mode="644",
-)
-
-files.directory(
-    name="Ensure vade systemd unit directory exists",
-    path="{{ VADE_SYSTEMD_UNIT_FILE | dirname }}",
-    user="root",
-    group="root",
-    mode="755",
-)
-
-files.file(
-    name="Ensure app unit file is tracked",
-    path="{{ VADE_SYSTEMD_UNIT_FILE }}",
+    path="{{ vade.app.paths.system_users_entry }}",
     user="root",
     group="root",
     mode="644",
@@ -54,30 +31,30 @@ files.file(
 
 server.user(
     name="Ensure app user exists",
-    user="{{ APP_USERNAME }}",
+    user="{{ vade.app.username }}",
     system=True,
     ensure_home=False,
 )
 
 files.directory(
     name="Ensure app directory exists",
-    path="{{ APP_HOME_DIR }}",
-    user="{{ APP_USERNAME }}",
-    group="{{ APP_USERNAME }}",
+    path="{{ vade.app.paths.home }}",
+    user="{{ vade.app.username }}",
+    group="{{ vade.app.username }}",
     mode="755",
 )
 
 files.directory(
     name="Ensure storage directory exists",
-    path="{{ APP_STORAGE_DIR }}",
-    user="{{ APP_USERNAME }}",
-    group="{{ APP_USERNAME }}",
+    path="{{ vade.app.paths.storage }}",
+    user="{{ vade.app.username }}",
+    group="{{ vade.app.username }}",
     mode="700",
 )
 
 files.file(
     name="Ensure secrets file exists",
-    path="{{ APP_SECRETS_FILE }}",
+    path="{{ vade.app.paths.secrets }}",
     user="root",
     group="root",
     mode="600",
@@ -85,8 +62,8 @@ files.file(
 
 files.directory(
     name="Ensure active deployment exists",
-    path="{{ APP_ACTIVE_DEPLOYMENT_DIR }}",
-    user="{{ APP_USERNAME }}",
-    group="{{ APP_USERNAME }}",
+    path="{{ vade.app.paths.active_deployment }}",
+    user="{{ vade.app.username }}",
+    group="{{ vade.app.username }}",
     mode="755",
 )

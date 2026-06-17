@@ -4,83 +4,89 @@
 
 files.directory(
     name="Delete stale candidate deployment if it exists",
-    path="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}",
+    path="{{ vade.app.paths.candidate_deployment }}",
     present=False,
 )
 
 files.directory(
     name="Create candidate deployment directory",
-    path="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}",
-    user="{{ APP_USERNAME }}",
-    group="{{ APP_USERNAME }}",
+    path="{{ vade.app.paths.candidate_deployment }}",
+    user="{{ vade.app.username }}",
+    group="{{ vade.app.username }}",
     mode="755",
 )
 
-{% if APP_HAS_ARTIFACTS %}
-if host.get_fact(Directory, path="{{ APP_ACTIVE_DEPLOYMENT_DIR }}/artifacts"):
+{% if vade.app.artifacts.local is defined %}
+if host.get_fact(Directory, path="{{ vade.app.paths.active_deployment }}/artifacts"):
     server.shell(
         name="Mirror artifacts from active deployment (to avoid retransferring them)",
-        commands=["cp -al {{ APP_ACTIVE_DEPLOYMENT_DIR }}/artifacts {{ APP_CANDIDATE_DEPLOYMENT_DIR }}/artifacts"],
+        commands=["cp -al {{ vade.app.paths.active_deployment }}/artifacts {{ vade.app.paths.candidate_deployment }}/artifacts"],
     )
 
 files.rsync(
     name="Sync local artifacts to candidate deployment",
-    src="{{ LOCAL_ARTIFACTS_DIR }}/",
-    dest="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}/artifacts",
+    src="{{ vade.app.artifacts.local }}/",
+    dest="{{ vade.app.paths.candidate_deployment }}/artifacts",
     flags=["-a", "--delete"],
     _sudo=True,
-    _sudo_user="{{ APP_USERNAME }}",
+    _sudo_user="{{ vade.app.username }}",
 )
 {% endif %}
 
-{% if APP_HAS_SYSTEMD_UNIT %}
+{% for unit in vade.app.systemd_units %}
 files.put(
     name="Upload systemd unit to candidate deployment",
-    src="{{ LOCAL_SYSTEMD_UNIT_PATH }}",
-    dest="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}/app.service.backup",
-    user="{{ APP_USERNAME }}",
-    group="{{ APP_USERNAME }}",
+    src="{{ unit.local_path }}",
+    dest="{{ unit.candidate_path }}",
+    user="{{ vade.app.username }}",
+    group="{{ vade.app.username }}",
     mode="644",
 )
-{% endif %}
+{% endfor %}
 
-{% if APP_HAS_CADDYFILE %}
+{% if vade.app.caddyfile.local is defined %}
 files.put(
     name="Upload Caddyfile to candidate deployment",
-    src="{{ LOCAL_CADDYFILE_PATH }}",
-    dest="{{ APP_CANDIDATE_DEPLOYMENT_DIR }}/Caddyfile",
-    user="{{ APP_USERNAME }}",
-    group="{{ APP_USERNAME }}",
+    src="{{ vade.app.caddyfile.local }}",
+    dest="{{ vade.app.caddyfile.candidate }}",
+    user="{{ vade.app.username }}",
+    group="{{ vade.app.username }}",
     mode="644",
 )
 {% endif %}
 
-{% if APP_RESERVE_PORTS %}
+{% if vade.app.network.ports | length > 0 %}
 ###
 # Reserve ports and bake them into the candidate's files
 ###
 
 if not host.get_fact(Which, command="python3"):
     raise DeployError(
-        "vade needs `python3` on the target host to reserve ports for `{{ APP_NAME }}`, "
+        "vade needs `python3` on the target host to reserve ports for `{{ vade.app.name }}`, "
         "but it was not found. Please install python3 and try again."
     )
 
 server.shell(
     name="Reserve ports and substitute them into the candidate's templated files",
     commands=[
-        "python3 {{ VADE_RESERVE_PORTS_SCRIPT }}"
-        " {{ APP_RESERVE_PORTS }}"
-        " {{ APP_ACTIVE_DEPLOYMENT_DIR }}/reserved-ports"
-        " {{ APP_CANDIDATE_DEPLOYMENT_DIR }}"
-        " {{ APP_USERNAME }}",
+        "python3 {{ vade.internal.reserve_ports_script.remote }}"
+        " {{ vade.app.network.ports | length }}"
+        " {{ vade.app.paths.active_deployment }}/reserved-ports"
+        " {{ vade.app.paths.candidate_deployment }}"
+        " {{ vade.app.username }}"
+        {%- if vade.app.caddyfile.candidate is defined %}
+        " {{ vade.app.caddyfile.candidate }}"
+        {%- endif %}
+        {%- for unit in vade.app.systemd_units %}
+        " {{ unit.candidate_path }}"
+        {%- endfor %}
     ],
 )
 {% endif %}
 
 files.directory(
     name="Delete previous deployment",
-    path="{{ APP_PREVIOUS_DEPLOYMENT_DIR }}",
+    path="{{ vade.app.paths.previous_deployment }}",
     present=False,
 )
 
@@ -95,7 +101,7 @@ set -uo pipefail
 
 bash <<'__VADE_PROMOTE__'
 set -euo pipefail
-{% filter trim %}{% with src_dir=APP_CANDIDATE_DEPLOYMENT_DIR, downgraded_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
+{% filter trim %}{% with src_dir=vade.app.paths.candidate_deployment, downgraded_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
 __VADE_PROMOTE__
 promote_status=$?
 
@@ -106,7 +112,7 @@ fi
 echo "Promotion failed (exit $promote_status), rolling back to the previous deployment..." >&2
 bash <<'__VADE_ROLLBACK__'
 set -euo pipefail
-{% filter trim %}{% with src_dir=APP_PREVIOUS_DEPLOYMENT_DIR %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
+{% filter trim %}{% with src_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
 __VADE_ROLLBACK__
 echo "Deploying failed and was rolled back" >&2
 exit 1

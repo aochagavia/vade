@@ -2,7 +2,9 @@
 """Reserve ports for a vade deployment and substitute them into its templated files.
 
 Usage:
-    reserve-ports.py RESERVE_COUNT ACTIVE_PORTS_FILE CANDIDATE_DIR APP_USER
+    reserve-ports.py RESERVE_COUNT ACTIVE_PORTS_FILE CANDIDATE_DIR APP_USER [TEMPLATED_FILE ...]
+
+Each TEMPLATED_FILE is an absolute path of a file that may contain port placeholders to substitute.
 """
 
 import glob
@@ -13,9 +15,6 @@ import sys
 # Each vade app records the ports it reserved in this file
 RESERVED_PORTS_GLOB = "/opt/vade/apps/*/active-deployment/reserved-ports"
 FIRST_PORT = 8000
-
-# Files in the candidate deployment that may contain port placeholders.
-TEMPLATED_FILES = ["Caddyfile", "app.service.backup"]
 
 
 def read_ports(path):
@@ -56,11 +55,11 @@ def choose_ports(reserve_count, active_ports, taken):
 
 def substitute_placeholders(text, ports):
     """Replace the port placeholders in `text` with concrete port numbers."""
-    # `{{ APP_PORT }}` is shorthand for the first reserved port.
-    text = text.replace("{{ APP_PORT }}", str(ports[0]))
-    # `{{ APP_PORTS[i] }}` refers to the i-th reserved port.
+    # `{{ vade.app.network.port }}` is shorthand for the first reserved port.
+    text = text.replace("{{ vade.app.network.port }}", str(ports[0]))
+    # `{{ vade.app.network.ports[i] }}` refers to the i-th reserved port.
     for i, port in enumerate(ports):
-        text = text.replace("{{ APP_PORTS[" + str(i) + "] }}", str(port))
+        text = text.replace("{{ vade.app.network.ports[" + str(i) + "] }}", str(port))
     return text
 
 
@@ -69,6 +68,7 @@ def main():
     active_ports_file = sys.argv[2]
     candidate_dir = sys.argv[3]
     app_user = sys.argv[4]
+    templated_files = sys.argv[5:]
 
     ports = choose_ports(
         reserve_count,
@@ -85,10 +85,7 @@ def main():
     os.chmod(candidate_ports_file, 0o644)
 
     # Bake the chosen ports into the candidate's templated files.
-    for name in TEMPLATED_FILES:
-        path = os.path.join(candidate_dir, name)
-        if not os.path.exists(path):
-            continue
+    for path in templated_files:
         with open(path) as f:
             content = f.read()
         with open(path, "w") as f:

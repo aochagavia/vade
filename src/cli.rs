@@ -1,4 +1,4 @@
-use crate::application_name::ApplicationName;
+use crate::app_name::AppName;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -40,7 +40,7 @@ pub struct CreateCommand {
     /// The application's name
     ///
     /// Only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed
-    pub application_name: ApplicationName,
+    pub application_name: AppName,
     /// The directory where the pyinfra deploy and related files should be generated
     #[arg(short, long, default_value = "vadegen")]
     pub out_dir: PathBuf,
@@ -51,7 +51,7 @@ pub struct DeployCommand {
     /// The application's name
     ///
     /// Only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed
-    pub application_name: ApplicationName,
+    pub app_name: AppName,
     /// The path to your project's configuration file (defaults to `vade.toml`)
     #[arg(short, long = "config")]
     pub configuration_file: Option<PathBuf>,

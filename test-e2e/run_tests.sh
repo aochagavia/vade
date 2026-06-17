@@ -97,6 +97,7 @@ cargo run -- deploy my-python-no-deps --config ../examples/python-no-deps/vade.t
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/python-no-deps/vade-gen/execute.py
 
 # Check
+sleep 0.2
 RESPONSE=$(curl -fsSk --resolve python-site.example.com:443:"$VM_IP_ADDR" https://python-site.example.com/)
 assert_response_contains "Python demo site check" "Hello world" "$RESPONSE"
 
@@ -117,6 +118,7 @@ cargo run -- deploy my-guestbook --config ../examples/guestbook/vade.toml --out-
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vade-gen/execute.py
 
 # Check GET
+sleep 0.2
 RESPONSE=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
 assert_response_contains "Guestbook GET check" '<h2>Sign the Guestbook:</h2>' "$RESPONSE"
 
@@ -139,5 +141,6 @@ cargo run -- deploy my-goatcounter --config ../examples/goatcounter/vade.toml --
 pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounter/vade-gen/execute.py
 
 # Check
+sleep 0.2
 RESPONSE=$(curl -fsSk --resolve goats.example.com:443:"$VM_IP_ADDR" https://goats.example.com/)
 assert_response_contains "Goatcounter check" "<h1>Create your first site and user</h1>" "$RESPONSE"

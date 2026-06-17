@@ -2,23 +2,23 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 #[derive(Clone)]
-pub struct ApplicationName {
-    pub inner: String,
+pub struct AppName {
+    inner: String,
 }
 
-impl ApplicationName {
+impl AppName {
     pub fn as_str(&self) -> &str {
         &self.inner
     }
 }
 
-impl Display for ApplicationName {
+impl Display for AppName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl FromStr for ApplicationName {
+impl FromStr for AppName {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

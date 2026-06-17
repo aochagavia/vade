@@ -1,11 +1,11 @@
 use rootcause::{Report, prelude::ResultExt};
 use std::{fs, path::PathBuf};
 
-use crate::templating::ApplicationMetadata;
+use crate::app_name::AppName;
 use crate::templating::{self, CREATE_TEMPLATE};
 
 pub(crate) struct Create {
-    pub(crate) application_meta: ApplicationMetadata,
+    pub(crate) application_name: AppName,
     pub(crate) out_dir: PathBuf,
 }
 
@@ -18,13 +18,8 @@ impl Create {
             )
         })?;
 
-        let context = templating::base_minijinja_context(
-            Some(&self.application_meta),
-            false,
-            false,
-            false,
-            0,
-        );
+        let context =
+            templating::base_minijinja_context(&self.out_dir, Some(&self.application_name), None);
         let mut env = templating::base_minijinja_env()?;
 
         // Write the pyinfra deploy

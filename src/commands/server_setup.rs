@@ -1,6 +1,5 @@
 use crate::templating;
 use crate::templating::SERVER_SETUP_TEMPLATE;
-use minijinja::context;
 use rootcause::Report;
 use rootcause::prelude::ResultExt;
 use std::path::PathBuf;
@@ -19,14 +18,9 @@ impl ServerSetup {
             )
         })?;
 
-        let mut context = templating::base_minijinja_context(None, false, false, false, 0);
-        let mut env = templating::base_minijinja_env()?;
-
         let out_dir_abs = path::absolute(&self.out_dir).unwrap();
-        context = context! {
-            LOCAL_RESERVE_PORTS_SCRIPT => out_dir_abs.join("reserve-ports.py").to_string_lossy(),
-            ..context,
-        };
+        let context = templating::base_minijinja_context(&out_dir_abs, None, None);
+        let mut env = templating::base_minijinja_env()?;
 
         // Write the pyinfra deploy
         // safety: the template is always valid

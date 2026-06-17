@@ -8,7 +8,7 @@ reserve-ports = 1
 [systemd-unit.template]
 builtin = "webapp.service"
 vars = {
-  exec_start = "{{ APP_ACTIVE_ARTIFACTS_DIR }}/goatcounter serve -listen :{{ APP_PORT }}"
+  exec_start = "{{ vade.app.artifacts.active }}/goatcounter serve -listen :{{ vade.app.network.port }}"
 }
 
 [caddyfile.template]

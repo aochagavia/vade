@@ -1,9 +1,10 @@
-use crate::application_name::ApplicationName;
+use crate::app_deployment::AppDeployment;
+use crate::app_name::AppName;
 use minijinja::{Environment, Template, UndefinedBehavior, context};
 use rootcause::{Report, bail};
 use serde::de::Error;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 pub struct TemplateAndUserVars {
@@ -12,53 +13,120 @@ pub struct TemplateAndUserVars {
 }
 
 pub fn base_minijinja_context(
-    app_meta: Option<&ApplicationMetadata>,
-    has_artifacts: bool,
-    has_caddyfile: bool,
-    has_systemd_unit: bool,
-    reserved_ports: u32,
+    out_dir_abs: &Path,
+    app_name: Option<&AppName>,
+    deployment: Option<&AppDeployment>,
 ) -> minijinja::Value {
-    let mut context = context!(
-        VADE_RESERVE_PORTS_SCRIPT => "/opt/vade/scripts/reserve-ports.py",
-    );
+    let out_dir_abs_str = out_dir_abs.to_string_lossy();
 
-    let Some(app_meta) = app_meta else {
-        return context;
+    let mut variables: Vec<(_, minijinja::Value)> = vec![
+        (
+            "vade.internal.reserve_ports_script.local",
+            out_dir_abs
+                .join("reserve-ports.py")
+                .to_string_lossy()
+                .into(),
+        ),
+        (
+            "vade.internal.reserve_ports_script.remote",
+            "/opt/vade/scripts/reserve-ports.py".into(),
+        ),
+    ];
+
+    let Some(app_name) = app_name else {
+        return build_minijinja_value(variables);
     };
 
-    if reserved_ports > 0 {
-        // APP_PORT and APP_PORTS[i] resolve to themselves, so the rendered files still have them
-        // after rendering. That way, the variable can be replaced at deploy time on the server (we
-        // usually don't know the port number before that moment).
-        let app_ports_values: Vec<_> = (0..reserved_ports)
-            .map(|i| format!("{{{{ APP_PORTS[{i}] }}}}"))
-            .collect();
+    let username = app_name.as_str();
+    let home_dir = &format!("/opt/vade/apps/{}", app_name.as_str());
+    let active_deployment = &format!("{home_dir}/active-deployment");
+    let candidate_deployment = &format!("{home_dir}/candidate-deployment");
+    variables.extend([
+        (
+            "vade.app.paths.system_users_entry",
+            format!("/opt/vade/system_users/{username}").into(),
+        ),
+        ("vade.app.name", app_name.as_str().into()),
+        ("vade.app.username", username.into()),
+        ("vade.app.paths.home", home_dir.into()),
+        (
+            "vade.app.paths.secrets",
+            format!("{home_dir}/secrets").into(),
+        ),
+        (
+            "vade.app.paths.storage",
+            format!("{home_dir}/storage").into(),
+        ),
+        ("vade.app.paths.active_deployment", active_deployment.into()),
+        (
+            "vade.app.paths.previous_deployment",
+            format!("{home_dir}/previous-deployment").into(),
+        ),
+        (
+            "vade.app.paths.candidate_deployment",
+            candidate_deployment.into(),
+        ),
+        (
+            "vade.app.artifacts.active",
+            format!("{active_deployment}/artifacts").into(),
+        ),
+        (
+            "vade.app.caddyfile.active",
+            format!("{active_deployment}/Caddyfile").into(),
+        ),
+    ]);
 
-        context = context!(
-            APP_PORT => "{{ APP_PORT }}",
-            APP_PORTS => app_ports_values,
-            ..context
-        );
+    let Some(deployment) = deployment else {
+        return build_minijinja_value(variables);
+    };
+
+    // The actual port number for each reserved port is only known at deploy time, on the
+    // server. For that reason, port variables resolve to themselves: they will stay in the
+    // file even after rendering, so the variable can be replaced on the server.
+    let app_ports_values: Vec<_> = (0..deployment.reserved_ports)
+        .map(|i| format!("{{{{ {APP_PORTS_VAR}[{i}] }}}}"))
+        .collect();
+
+    variables.extend([(APP_PORTS_VAR, app_ports_values.into())]);
+
+    if deployment.reserved_ports > 0 {
+        variables.extend([(APP_PORT_VAR, format!("{{{{ {APP_PORT_VAR} }}}}").into())]);
     }
 
-    context!(
-        APP_NAME => app_meta.name(),
-        APP_USERNAME => app_meta.username(),
-        APP_HOME_DIR => app_meta.home_dir(),
-        APP_SECRETS_FILE => format!("{}/secrets", app_meta.home_dir()),
-        APP_STORAGE_DIR => format!("{}/storage", app_meta.home_dir()),
-        APP_SYSTEMD_UNIT_FILE => format!("/etc/systemd/system/{}", app_meta.systemd_unit_name()),
-        APP_ACTIVE_DEPLOYMENT_DIR => format!("{}/active-deployment", app_meta.home_dir()),
-        APP_ACTIVE_ARTIFACTS_DIR => format!("{}/active-deployment/artifacts", app_meta.home_dir()),
-        APP_PREVIOUS_DEPLOYMENT_DIR => format!("{}/previous-deployment", app_meta.home_dir()),
-        APP_CANDIDATE_DEPLOYMENT_DIR => format!("{}/candidate-deployment", app_meta.home_dir()),
-        VADE_SYSTEM_USER_FILE => format!("/opt/vade/system_users/{}", app_meta.username()),
-        VADE_SYSTEMD_UNIT_FILE => format!("/opt/vade/systemd_units/{}", app_meta.systemd_unit_name()),
-        APP_HAS_ARTIFACTS => has_artifacts,
-        APP_HAS_CADDYFILE => has_caddyfile,
-        APP_HAS_SYSTEMD_UNIT => has_systemd_unit,
-        ..context
-    )
+    let mut units = Vec::new();
+    for unit in &deployment.systemd_units {
+        units.push(context! {
+            name => unit.name,
+            local_path => format!("{out_dir_abs_str}/{}", unit.name),
+            candidate_path => format!("{candidate_deployment}/systemd_unit_copies/{}", unit.name),
+            active_path => format!("{active_deployment}/systemd_unit_copies/{}", unit.name),
+            installed_path => format!("/etc/systemd/system/{}", unit.name)
+        })
+    }
+
+    variables.extend([("vade.app.systemd_units", units.into())]);
+
+    if let Some(artifacts_dir) = &deployment.artifacts {
+        variables.extend([(
+            "vade.app.artifacts.local",
+            artifacts_dir.to_string_lossy().into(),
+        )]);
+    }
+
+    if deployment.caddyfile.is_some() {
+        variables.extend([
+            (
+                "vade.app.caddyfile.local",
+                out_dir_abs.join("Caddyfile").to_string_lossy().into(),
+            ),
+            (
+                "vade.app.caddyfile.candidate",
+                format!("{candidate_deployment}/Caddyfile").into(),
+            ),
+        ])
+    }
+
+    build_minijinja_value(variables)
 }
 
 pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
@@ -155,35 +223,9 @@ fn explain_known_missing_vars(
     None
 }
 
-pub struct ApplicationMetadata {
-    name: ApplicationName,
-}
-
-impl ApplicationMetadata {
-    pub fn new(name: ApplicationName) -> Self {
-        Self { name }
-    }
-
-    fn name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    fn username(&self) -> &str {
-        self.name.as_str()
-    }
-
-    fn systemd_unit_name(&self) -> String {
-        format!("{}.service", self.name())
-    }
-
-    fn home_dir(&self) -> String {
-        format!("/opt/vade/apps/{}", self.name)
-    }
-}
-
 // Variable names
-pub const APP_PORT_VAR: &str = "APP_PORT";
-pub const APP_PORTS_VAR: &str = "APP_PORTS";
+pub const APP_PORT_VAR: &str = "vade.app.network.port";
+pub const APP_PORTS_VAR: &str = "vade.app.network.ports";
 
 // Caddyfile templates
 pub static CADDYFILE_STATIC_FILES: &str =
@@ -207,3 +249,100 @@ pub static DEPLOY_TEMPLATE: &str = include_str!("resources/pyinfra-templates/dep
 pub static CREATE_TEMPLATE: &str = include_str!("resources/pyinfra-templates/create.py.j2");
 pub static SERVER_SETUP_TEMPLATE: &str =
     include_str!("resources/pyinfra-templates/server-setup.py.j2");
+
+// Variable names use dotted paths (e.g. `vade.app.name`) to express nesting. Here we transform
+// them into an actual tree.
+fn build_minijinja_value(vars: Vec<(&str, minijinja::Value)>) -> minijinja::Value {
+    enum Node {
+        Leaf(minijinja::Value),
+        Branch(BTreeMap<String, Node>),
+    }
+
+    fn insert(map: &mut BTreeMap<String, Node>, path: &str, value: minijinja::Value) {
+        match path.split_once('.') {
+            Some((head, rest)) => match map
+                .entry(head.to_string())
+                .or_insert_with(|| Node::Branch(BTreeMap::new()))
+            {
+                Node::Branch(children) => insert(children, rest, value),
+                Node::Leaf(_) => unreachable!("conflicting variable path `{path}`"),
+            },
+            None => {
+                map.insert(path.to_string(), Node::Leaf(value));
+            }
+        }
+    }
+
+    fn into_value(map: BTreeMap<String, Node>) -> minijinja::Value {
+        minijinja::Value::from(
+            map.into_iter()
+                .map(|(key, node)| match node {
+                    Node::Leaf(value) => (key, value),
+                    Node::Branch(children) => (key, into_value(children)),
+                })
+                .collect::<BTreeMap<_, _>>(),
+        )
+    }
+
+    let mut root = BTreeMap::new();
+    for (path, value) in vars {
+        insert(&mut root, path, value);
+    }
+
+    into_value(root)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app_deployment::SystemdUnit;
+    use crate::util::ResolvedPath;
+    use std::str::FromStr;
+
+    fn test_render_registered(app_deployment: Option<&AppDeployment>, template: &str) {
+        let context = base_minijinja_context(
+            Path::new("/tmp/vadegen"),
+            Some(&AppName::from_str("foo").unwrap()),
+            app_deployment,
+        );
+        let env = base_minijinja_env().unwrap();
+        let template = env.get_template(template).unwrap();
+        template.render(context).unwrap();
+    }
+
+    #[test]
+    fn test_render_deploy_tasks_minimal() {
+        let deployment = AppDeployment {
+            artifacts: None,
+            caddyfile: None,
+            systemd_units: vec![],
+            reserved_ports: 0,
+        };
+        test_render_registered(Some(&deployment), "deploy-tasks.py.j2");
+    }
+
+    #[test]
+    fn test_render_deploy_tasks_full() {
+        let deployment = AppDeployment {
+            artifacts: Some(ResolvedPath::from_str("/my/local/artifacts")),
+            caddyfile: Some(TemplateAndUserVars {
+                template: "Believe me, I'm a Caddyfile -.-".to_string(),
+                user_vars: Default::default(),
+            }),
+            systemd_units: vec![SystemdUnit {
+                name: "foo.service".to_string(),
+                template: TemplateAndUserVars {
+                    template: "Believe me, I'm a systemd unit :)".to_string(),
+                    user_vars: Default::default(),
+                },
+            }],
+            reserved_ports: 0,
+        };
+        test_render_registered(Some(&deployment), "deploy-tasks.py.j2");
+    }
+
+    #[test]
+    fn test_render_create() {
+        test_render_registered(None, "create-tasks.py.j2");
+    }
+}
