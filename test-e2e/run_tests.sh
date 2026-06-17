@@ -147,8 +147,8 @@ test_python-no-deps() {
 
 test_python-no-deps-overwrite() {
   # Deploy the static site to the same app used by python-no-deps
-  # Note: we use `--set-json` to have the Caddyfile target `python-site.example.com`
-  cargo run -- deploy my-python-no-deps --config ../examples/static-site/vade.toml --out-dir ../examples/static-site/vadegen --set-json 'caddyfile.domains=["python-site.example.com"]'
+  # Note: we use `--var-json` to have the Caddyfile target `python-site.example.com`
+  cargo run -- deploy my-python-no-deps --config ../examples/static-site/vade.toml --out-dir ../examples/static-site/vadegen --var-json 'caddyfile.vars.domains=["python-site.example.com"]'
   pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/static-site/vadegen/execute.py
 
   # Check

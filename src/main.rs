@@ -44,7 +44,12 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
     let path_resolver = RelativePathResolver::with_root(config_parent_path.to_owned());
 
     deploy::Deploy {
-        app_deployment: AppDeployment::from_config(&command.app_name, config, &path_resolver)?,
+        app_deployment: AppDeployment::from_config(
+            &command.app_name,
+            config,
+            &command.set_json,
+            &path_resolver,
+        )?,
         app_name: command.app_name,
         out_dir: command.out_dir,
     }

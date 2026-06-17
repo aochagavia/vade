@@ -1,4 +1,5 @@
 use crate::app_name::AppName;
+use crate::cli::{OverrideScope, VarOverride};
 use crate::config::AppConfig;
 use crate::templating::TemplateAndUserVars;
 use crate::util::{RelativePathResolver, ResolvedPath};
@@ -20,6 +21,7 @@ impl AppDeployment {
     pub fn from_config(
         app_name: &AppName,
         config: AppConfig,
+        overrides: &[VarOverride],
         path_resolver: &RelativePathResolver,
     ) -> Result<Self, Report> {
         let artifacts_dir = config
@@ -38,7 +40,7 @@ impl AppDeployment {
         }
 
         // Load Caddyfile
-        let caddyfile = config
+        let mut caddyfile = config
             .caddyfile
             .map(|c| c.load_template(path_resolver))
             .transpose()?;
@@ -54,6 +56,9 @@ impl AppDeployment {
             });
         }
 
+        // Apply overrides on top of the user-provided variables from the config
+        apply_overrides(overrides, caddyfile.as_mut(), &mut systemd_units)?;
+
         Ok(AppDeployment {
             artifacts: artifacts_dir,
             caddyfile,
@@ -61,4 +66,39 @@ impl AppDeployment {
             reserved_ports: config.network.reserve_ports,
         })
     }
+}
+
+fn apply_overrides(
+    overrides: &[VarOverride],
+    mut caddyfile: Option<&mut TemplateAndUserVars>,
+    systemd_units: &mut [SystemdUnit],
+) -> Result<(), Report> {
+    for var_override in overrides {
+        let user_vars = match var_override.scope {
+            OverrideScope::Caddyfile => {
+                &mut caddyfile
+                    .as_deref_mut()
+                    .ok_or_else(|| {
+                        report!(
+                            "override targets `caddyfile`, but the configuration has no `[caddyfile]` section"
+                        )
+                    })?
+                    .user_vars
+            }
+            OverrideScope::SystemdUnit(index) => {
+                &mut systemd_units
+                    .get_mut(index)
+                    .ok_or_else(|| {
+                        report!(
+                            "override targets `systemd-unit[{index}]`, which doesn't exist")
+                    })?
+                    .template
+                    .user_vars
+            }
+        };
+
+        user_vars.insert(var_override.name.clone(), var_override.value.clone());
+    }
+
+    Ok(())
 }

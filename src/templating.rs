@@ -67,6 +67,10 @@ pub fn base_minijinja_context(
             candidate_deployment.into(),
         ),
         (
+            "vade.app.paths.active_systemd_unit_copies",
+            format!("{active_deployment}/systemd_unit_copies").into(),
+        ),
+        (
             "vade.app.artifacts.active",
             format!("{active_deployment}/artifacts").into(),
         ),

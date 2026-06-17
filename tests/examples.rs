@@ -47,6 +47,64 @@ fn examples_run_deploy() {
     }
 }
 
+#[test]
+fn deploy_applies_var_overrides() {
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/python-no-deps/vade.toml");
+    let out = fresh_out_dir("override-deploy");
+    run_vade(&[
+        "deploy",
+        "test-app",
+        "--config",
+        path_arg(&config),
+        "--out-dir",
+        path_arg(&out),
+        "--var-json",
+        r#"caddyfile.vars.domains=["override.example.com"]"#,
+        "--var-json",
+        "systemd-unit[0].vars.exec_start=\"python3 /custom/main.py\"",
+    ]);
+
+    let caddyfile = fs::read_to_string(out.join("Caddyfile")).expect("Caddyfile was not generated");
+    assert!(
+        caddyfile.contains("override.example.com"),
+        "Caddyfile did not use the overridden domain:\n{caddyfile}"
+    );
+    assert!(
+        !caddyfile.contains("python-site.example.com"),
+        "Caddyfile still contains the original domain:\n{caddyfile}"
+    );
+
+    let unit = fs::read_to_string(out.join("test-app.service")).expect("unit was not generated");
+    assert!(
+        unit.contains("ExecStart=python3 /custom/main.py"),
+        "systemd unit did not use the overridden exec_start:\n{unit}"
+    );
+}
+
+#[test]
+fn deploy_rejects_out_of_range_unit_override() {
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/python-no-deps/vade.toml");
+    let out = fresh_out_dir("override-bad-index-deploy");
+    let output = Command::new(VADE_BIN)
+        .args([
+            "deploy",
+            "test-app",
+            "--config",
+            path_arg(&config),
+            "--out-dir",
+            path_arg(&out),
+            "--set",
+            "systemd-unit[5].exec_start=nope",
+        ])
+        .output()
+        .expect("failed to run the vade binary");
+
+    assert!(
+        !output.status.success(),
+        "expected deploy to fail for an out-of-range systemd unit override"
+    );
+}
+
 // Collect every `vade.toml` file matching the glob pattern `examples/*/vade.toml`.
 fn example_configs() -> Vec<PathBuf> {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
