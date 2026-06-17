@@ -2,9 +2,7 @@
 
 Requirements (other than vade's own):
 
-- `incus`: creates and tears down the test VM (see )
-- `pyinfra`: provisions the VM and applies the generated deploy
-- `rsync`: used by pyinfra to sync deployment artifacts
+- `incus`: creates and tears down the test VM
 - `curl`: makes requests to ensure the deployed apps work
 
 ## Incus setup
@@ -16,27 +14,27 @@ sudo systemctl enable --now incus.socket incus.service
 sudo incus admin init
 
 # Assuming `incusbr0` is the bridge network, we need to allow traffic between it and the host
-sudo ufw allow in on incusbr0          # DHCP/DNS to the host + VM -> host replies
-sudo ufw route allow in on incusbr0    # VM -> internet
+# See https://linuxcontainers.org/incus/docs/main/howto/network_bridge_firewalld/#ufw-add-rules-for-the-bridge for details
+sudo ufw allow in on incusbr0
+sudo ufw route allow in on incusbr0
 sudo ufw route allow out on incusbr0
 ```
 
 ## Running the tests
 
 ```bash
-./run_tests.sh                    # full run against a fresh VM
-./run_tests.sh --reuse-vm         # full run, reusing the existing VM
+./run_tests.sh              # full run, fresh VM
+./run_tests.sh --reuse-vm   # full run, reused VM
+
+# We currently do not shut down the VM after testing, so you need to do that manually
+sudo incus delete --force vade-test-vm
 ```
 
 ## Upcoming tests
 
-- Deployment scenario 1:
-  - DONE: Deploy static app from examples, send a GET request and check that the response is what we expected
-  - Scaffold static app + run works
-  - Scaffold dynamic app + run works
-  - Scaffold dynamic app on top of static app replaces it
-  - Nuke?
-- Deployment scenario 2:
-  - Scaffold secrets for app and populate them
-  - Scaffold dynamic app that reads secrets and check that they are returned
-  - SSH into the machine and do something to ensure the next deploy fails. Run a deploy and ensure it rolls back cleanly.
+- Deploy static app on top of existing dynamic app replaces it and removes the systemd units from /etc/systemd/system
+- Nuke app removes it, leaving no traces (no user, no files, no stray systemd units).
+- Hardening:
+  - Try to deploy an application with the same name as an existing user that is not managed by vade (e.g., `operator`). Ensure the deployment fails with an appropriate error message.
+  - Install a systemd unit in the machine, then try to deploy an application that uses the same unit file name, ensure the deployment fails with an appropriate error message.
+  - Try to deploy invalid files: Caddyfile, unit file. Ensure the deployment fails with an appropriate error message. Ensure it rolls back to the previous deployment (make sure it exists, obviously).
