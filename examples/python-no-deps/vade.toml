@@ -4,6 +4,12 @@ path = "artifacts"
 [network]
 reserve-ports = 1
 
+[caddyfile.template]
+builtin = "reverse-proxy"
+vars = {
+  domains = ["python-site.example.com"]
+}
+
 [[systemd-unit]]
 [systemd-unit.template]
 builtin = "webapp.service"
@@ -12,10 +18,4 @@ vars = {
   extra_env_vars = {
     "MY_ENV_VAR" = "42"
   }
-}
-
-[caddyfile.template]
-builtin = "reverse-proxy"
-vars = {
-  domains = ["python-site.example.com"]
 }
