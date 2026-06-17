@@ -37,10 +37,10 @@ pub struct ServerSetupCommand {
 
 #[derive(Parser)]
 pub struct CreateCommand {
-    /// The application's name
+    /// The name of the app to create on the server
     ///
     /// Only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed
-    pub application_name: AppName,
+    pub app_name: AppName,
     /// The directory where the pyinfra deploy and related files should be generated
     #[arg(short, long, default_value = "vadegen")]
     pub out_dir: PathBuf,
@@ -48,7 +48,7 @@ pub struct CreateCommand {
 
 #[derive(Parser)]
 pub struct DeployCommand {
-    /// The application's name
+    /// The name of the app that this deployment targets on the server
     ///
     /// Only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed
     pub app_name: AppName,

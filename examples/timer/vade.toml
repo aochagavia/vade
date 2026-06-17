@@ -1,5 +1,4 @@
 [[systemd-unit]]
-name = "main"
 enable = false
 
 [systemd-unit.template]
@@ -8,12 +7,11 @@ inline = """
 Description=Touches a file, demonstrating that the service ran to completion
 
 [Service]
-ExecStart=touch /tmp/a-new-file-is-born
+ExecStart=touch /tmp/my-timer-was-here
 """
 
 [[systemd-unit]]
-name = "my-timer"
-filename = "{{ vade.app.systemd_units['main'] }}.timer"
+file-extension = "timer"
 
 [systemd-unit.template]
 inline = """

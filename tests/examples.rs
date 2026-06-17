@@ -54,7 +54,7 @@ fn example_configs() -> Vec<PathBuf> {
     let mut configs = Vec::new();
     for entry in fs::read_dir(&examples).expect("failed to read examples directory") {
         let path = entry.unwrap().path();
-        if path.is_dir() && path.file_name().is_some_and(|name| name != "timer") {
+        if path.is_dir() {
             let candidate_path = path.join("vade.toml");
             if candidate_path.is_file() {
                 configs.push(candidate_path);

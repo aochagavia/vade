@@ -47,10 +47,9 @@ impl AppDeployment {
         let mut systemd_units = Vec::new();
         for c in config.systemd_units {
             let template = c.load_template(path_resolver)?;
+            let suffix = c.file_suffix.map(|s| format!("-{s}")).unwrap_or_default();
             systemd_units.push(SystemdUnit {
-                name: c
-                    .name
-                    .unwrap_or_else(|| format!("{}.service", app_name.as_str())),
+                name: format!("{}{suffix}.{}", app_name.as_str(), c.file_extension),
                 template,
             });
         }

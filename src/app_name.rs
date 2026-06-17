@@ -22,16 +22,12 @@ impl FromStr for AppName {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if !s.is_ascii() {
-            return Err("only ASCII is allowed inside application names");
-        }
-
         let valid = s
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
         if !valid {
             return Err(
-                "only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed",
+                "only alphanumeric ASCII characters, dashes (`-`), and underscores (`_`) are allowed",
             );
         }
 

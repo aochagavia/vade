@@ -11,7 +11,7 @@ use crate::commands::server_setup;
 use crate::util::RelativePathResolver;
 use app_deployment::AppDeployment;
 use clap::Parser;
-use cli::{Cli, Command, CreateCommand, DeployCommand};
+use cli::{Cli, Command, DeployCommand};
 use commands::{create, deploy};
 use rootcause::Report;
 use rootcause::prelude::ResultExt;
@@ -22,21 +22,13 @@ fn main() -> Result<(), Report> {
     let cli = Cli::parse();
     match cli.command {
         Command::ServerSetup(cmd) => server_setup(cmd),
-        Command::Create(cmd) => create(cmd),
+        Command::Create(cmd) => create::execute(&cmd.app_name, &cmd.out_dir),
         Command::Deploy(cmd) => deploy(cmd),
     }
 }
 
 fn server_setup(command: ServerSetupCommand) -> Result<(), Report> {
     server_setup::ServerSetup {
-        out_dir: command.out_dir,
-    }
-    .execute()
-}
-
-fn create(command: CreateCommand) -> Result<(), Report> {
-    create::Create {
-        application_name: command.application_name,
         out_dir: command.out_dir,
     }
     .execute()

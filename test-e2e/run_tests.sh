@@ -144,3 +144,15 @@ pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/goatcounte
 sleep 0.2
 RESPONSE=$(curl -fsSk --resolve goats.example.com:443:"$VM_IP_ADDR" https://goats.example.com/)
 assert_response_contains "Goatcounter check" "<h1>Create your first site and user</h1>" "$RESPONSE"
+
+###
+# Timers
+###
+
+# Deploy
+cargo run -- deploy my-timer --config ../examples/timer/vade.toml --out-dir ../examples/timer/vade-gen
+pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/timer/vade-gen/execute.py
+
+# Check
+sleep 0.2
+sudo incus exec vade-test-vm -- ls /tmp/my-timer-was-here

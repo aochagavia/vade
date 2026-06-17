@@ -93,11 +93,28 @@ pub enum TemplateSource {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct SystemdUnitConfig {
-    /// The name of this systemd unit
+    /// Whether the unit should be automatically enabled after being deployed
     ///
-    /// This field can be omitted when there is a single systemd unit, but needs to be provided
-    /// otherwise
-    pub name: Option<String>,
+    /// Defaults to `true`
+    #[serde(default = "default_unit_enable")]
+    pub enable: bool,
+    /// The file suffix of this systemd unit (if any)
+    ///
+    /// On the server, systemd unit file names need to be unique. To prevent collisions, unit names
+    /// are namespaced based on the app name. If you need to differentiate between multiple
+    /// units in a single project, you can do so by assigning them different suffixes.
+    ///
+    /// The following examples show the unit file names, as they would be in the sever, for an
+    /// app called `foo` (assuming the default `service` extension):
+    ///
+    /// - No suffix: `foo.service`
+    /// - Suffix set to `bar`: `foo-bar.service`
+    pub file_suffix: Option<String>,
+    /// The file extension of this systemd unit
+    ///
+    /// Defaults to `service`
+    #[serde(default = "default_unit_file_extension")]
+    pub file_extension: String,
     /// The template from which this systemd unit file will be rendered
     pub template: TemplateConfig,
 }
@@ -213,13 +230,21 @@ fn toml_to_minijinja(value: &toml::Value) -> minijinja::Value {
     }
 }
 
+fn default_unit_enable() -> bool {
+    true
+}
+
+fn default_unit_file_extension() -> String {
+    "service".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::assert_matches;
 
     #[test]
-    fn test_load_from_slice_single_unit() {
+    fn test_load_single_unit() {
         let src = r#"
 [artifacts]
 path = "artifacts"
@@ -251,7 +276,7 @@ vars = {
         assert!(config.caddyfile.is_some());
 
         let systemd_config = &config.systemd_units[0];
-        assert!(systemd_config.name.is_none());
+        assert!(systemd_config.file_suffix.is_none());
         assert_eq!(
             systemd_config.template.source,
             TemplateSource::Builtin("webapp.service".to_string())
@@ -271,10 +296,9 @@ vars = {
     }
 
     #[test]
-    fn test_load_from_slice_two_units() {
+    fn test_load_two_units() {
         let src = r#"
 [[systemd-unit]]
-name = "main"
 enable = false
 
 [systemd-unit.template]
@@ -287,8 +311,7 @@ ExecStart=touch /tmp/a-new-file-is-born
 """
 
 [[systemd-unit]]
-name = "my-timer"
-filename = "{{ vade.app.systemd_units['main'] }}.timer"
+file-extension = "timer"
 
 [systemd-unit.template]
 inline = """
@@ -310,12 +333,14 @@ WantedBy=timers.target
         assert!(config.caddyfile.is_none());
 
         let systemd_config = &config.systemd_units[0];
-        assert_eq!(systemd_config.name.as_ref().unwrap(), "main");
+        assert!(!systemd_config.enable);
+        assert!(systemd_config.file_suffix.is_none());
         assert_matches!(systemd_config.template.source, TemplateSource::Inline(_));
         assert_eq!(systemd_config.template.vars.len(), 0);
 
         let systemd_config = &config.systemd_units[1];
-        assert_eq!(systemd_config.name.as_ref().unwrap(), "my-timer");
+        assert!(systemd_config.enable);
+        assert!(systemd_config.file_suffix.is_none());
         assert_matches!(systemd_config.template.source, TemplateSource::Inline(_));
         assert_eq!(systemd_config.template.vars.len(), 0);
     }
