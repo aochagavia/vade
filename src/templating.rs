@@ -22,10 +22,7 @@ pub fn base_minijinja_context(
     let mut variables: Vec<(_, minijinja::Value)> = vec![
         (
             "vade.internal.reserve_ports_script.local",
-            out_dir_abs
-                .join("assign-ports.py")
-                .to_string_lossy()
-                .into(),
+            out_dir_abs.join("assign-ports.py").to_string_lossy().into(),
         ),
         (
             "vade.internal.reserve_ports_script.remote",

@@ -98,18 +98,18 @@ pub struct SystemdUnitConfig {
     /// Defaults to `true`
     #[serde(default = "default_unit_enable")]
     pub enable: bool,
-    /// The file suffix of this systemd unit (if any)
+    /// The filename suffix of this systemd unit (if any)
     ///
     /// On the server, systemd unit file names need to be unique. To prevent collisions, unit names
     /// are namespaced based on the app name. If you need to differentiate between multiple
     /// units in a single project, you can do so by assigning them different suffixes.
     ///
     /// The following examples show the unit file names, as they would be in the sever, for an
-    /// app called `foo` (assuming the default `service` extension):
+    /// app called `foo` (assuming the default `service` file extension):
     ///
     /// - No suffix: `foo.service`
     /// - Suffix set to `bar`: `foo-bar.service`
-    pub file_suffix: Option<String>,
+    pub filename_suffix: Option<String>,
     /// The file extension of this systemd unit
     ///
     /// Defaults to `service`
@@ -276,7 +276,7 @@ vars = {
         assert!(config.caddyfile.is_some());
 
         let systemd_config = &config.systemd_units[0];
-        assert!(systemd_config.file_suffix.is_none());
+        assert!(systemd_config.filename_suffix.is_none());
         assert_eq!(
             systemd_config.template.source,
             TemplateSource::Builtin("webapp.service".to_string())
@@ -334,13 +334,13 @@ WantedBy=timers.target
 
         let systemd_config = &config.systemd_units[0];
         assert!(!systemd_config.enable);
-        assert!(systemd_config.file_suffix.is_none());
+        assert!(systemd_config.filename_suffix.is_none());
         assert_matches!(systemd_config.template.source, TemplateSource::Inline(_));
         assert_eq!(systemd_config.template.vars.len(), 0);
 
         let systemd_config = &config.systemd_units[1];
         assert!(systemd_config.enable);
-        assert!(systemd_config.file_suffix.is_none());
+        assert!(systemd_config.filename_suffix.is_none());
         assert_matches!(systemd_config.template.source, TemplateSource::Inline(_));
         assert_eq!(systemd_config.template.vars.len(), 0);
     }
