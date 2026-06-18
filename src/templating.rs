@@ -23,13 +23,13 @@ pub fn base_minijinja_context(
         (
             "vade.internal.reserve_ports_script.local",
             out_dir_abs
-                .join("reserve-ports.py")
+                .join("assign-ports.py")
                 .to_string_lossy()
                 .into(),
         ),
         (
             "vade.internal.reserve_ports_script.remote",
-            "/opt/vade/scripts/reserve-ports.py".into(),
+            "/opt/vade/scripts/assign-ports.py".into(),
         ),
     ];
 

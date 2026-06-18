@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Reserve ports for a vade deployment and substitute them into its templated files.
+"""Assign ports for a vade deployment, substituting templated placeholders in the provided files
 
 Usage:
-    reserve-ports.py RESERVE_COUNT ACTIVE_PORTS_FILE CANDIDATE_DIR APP_USER [TEMPLATED_FILE ...]
+    assign-ports.py PORT_COUNT ACTIVE_PORTS_FILE CANDIDATE_DIR APP_USER [TEMPLATED_FILE ...]
 
-Each TEMPLATED_FILE is an absolute path of a file that may contain port placeholders to substitute.
+Each TEMPLATED_FILE is a path to a file that may contain port placeholders to substitute
 """
 
 import glob
@@ -12,8 +12,8 @@ import os
 import shutil
 import sys
 
-# Each vade app records the ports it reserved in this file
-RESERVED_PORTS_GLOB = "/opt/vade/apps/*/active-deployment/reserved-ports"
+# Each vade app records its assigned ports in this file
+ASSIGNED_PORTS_GLOB = "/opt/vade/apps/*/active-deployment/assigned-ports"
 FIRST_PORT = 8000
 
 
@@ -27,20 +27,16 @@ def read_ports(path):
 
 
 def gather_taken_ports():
-    """Return the set of ports already reserved by any app's active deployment."""
+    """Return the set of ports already assigned to active apps."""
     taken = set()
-    for path in glob.glob(RESERVED_PORTS_GLOB):
+    for path in glob.glob(ASSIGNED_PORTS_GLOB):
         taken.update(read_ports(path))
     return taken
 
 
 def choose_ports(reserve_count, active_ports, taken):
-    """Pick the ports for this deployment.
-
-    Reuse the active deployment's ports if it already reserved exactly the number we need
-    (this keeps an app's ports stable across redeploys). Otherwise hand out the lowest
-    free ports, starting at FIRST_PORT.
-    """
+    """Pick the ports for this deployment."""
+    # Reuse previously assigned ports if the count hasn't changed
     if len(active_ports) == reserve_count:
         return active_ports
 
@@ -55,9 +51,9 @@ def choose_ports(reserve_count, active_ports, taken):
 
 def substitute_placeholders(text, ports):
     """Replace the port placeholders in `text` with concrete port numbers."""
-    # `{{ vade.app.network.port }}` is shorthand for the first reserved port.
+    # `{{ vade.app.network.port }}` is shorthand for the first assigned port
     text = text.replace("{{ vade.app.network.port }}", str(ports[0]))
-    # `{{ vade.app.network.ports[i] }}` refers to the i-th reserved port.
+    # `{{ vade.app.network.ports[i] }}` refers to the i-th assigned port
     for i, port in enumerate(ports):
         text = text.replace("{{ vade.app.network.ports[" + str(i) + "] }}", str(port))
     return text
@@ -76,8 +72,8 @@ def main():
         gather_taken_ports(),
     )
 
-    # Record the reservation so other apps are aware of it
-    candidate_ports_file = os.path.join(candidate_dir, "reserved-ports")
+    # Record the assignment so other apps are aware of it
+    candidate_ports_file = os.path.join(candidate_dir, "assigned-ports")
     with open(candidate_ports_file, "w") as f:
         for port in ports:
             f.write(str(port) + "\n")

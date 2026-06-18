@@ -85,7 +85,7 @@ server.shell(
     commands=[
         "python3 {{ vade.internal.reserve_ports_script.remote }}"
         " {{ vade.app.network.ports | length }}"
-        " {{ vade.app.paths.active_deployment }}/reserved-ports"
+        " {{ vade.app.paths.active_deployment }}/assigned-ports"
         " {{ vade.app.paths.candidate_deployment }}"
         " {{ vade.app.username }}"
         {%- if vade.app.caddyfile.candidate is defined %}

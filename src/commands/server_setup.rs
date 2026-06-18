@@ -35,11 +35,11 @@ impl ServerSetup {
         fs::write(self.out_dir.join("execute.py"), server_setup)
             .context("failed to write pyinfra deploy")?;
 
-        fs::write(self.out_dir.join("reserve-ports.py"), RESERVE_PORTS_SCRIPT)
+        fs::write(self.out_dir.join("assign-ports.py"), RESERVE_PORTS_SCRIPT)
             .context("failed to write port-reservation script")?;
 
         Ok(())
     }
 }
 
-pub static RESERVE_PORTS_SCRIPT: &str = include_str!("../resources/scripts/reserve-ports.py");
+pub static RESERVE_PORTS_SCRIPT: &str = include_str!("../resources/scripts/assign-ports.py");
