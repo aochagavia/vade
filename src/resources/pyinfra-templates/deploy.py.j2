@@ -69,7 +69,7 @@ files.put(
 )
 {% endif %}
 
-{% if vade.app.network.ports | length > 0 %}
+{% if vade.app.network.ports %}
 ###
 # Reserve ports and bake them into the candidate's files
 ###
@@ -111,11 +111,12 @@ files.directory(
 server.shell(
     name="Promote deployment candidate (rolling back on failure)",
     commands=r"""
+# The weird structure of the script is actually a poor man's try/catch in bash
 set -uo pipefail
 
 bash <<'__VADE_PROMOTE__'
 set -euo pipefail
-{% filter trim %}{% with src_dir=vade.app.paths.candidate_deployment, downgraded_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
+{% with src_dir=vade.app.paths.candidate_deployment, downgraded_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}
 __VADE_PROMOTE__
 promote_status=$?
 
@@ -126,8 +127,15 @@ fi
 echo "Promotion failed (exit $promote_status), rolling back to the previous deployment..." >&2
 bash <<'__VADE_ROLLBACK__'
 set -euo pipefail
-{% filter trim %}{% with src_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}{% endfilter %}
+{% with src_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}
 __VADE_ROLLBACK__
+rollback_status=$?
+
+if [ "$rollback_status" -ne 0 ]; then
+  echo "FATAL: rollback failed (exit $rollback_status). The host may be in an inconsistent state and needs manual recovery." >&2
+  exit 2
+fi
+
 echo "Deploying failed and was rolled back" >&2
 exit 1
 """,

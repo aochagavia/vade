@@ -2,8 +2,8 @@
 # 1. # Tear down the original application
 ######
 
-# Stop, disable, and delete the currently active deployment's systemd units if present.
-# The installed unit paths are derived them from the unit copies in the active deployment.
+# Stop, disable, and delete the currently active deployment's systemd units if present
+# (installed unit paths are derived them from their copies in the active deployment)
 if [ -d "{{ vade.app.paths.active_systemd_unit_copies }}" ]; then
   for unit_copy in "{{ vade.app.paths.active_systemd_unit_copies }}"/*; do
     [ -e "$unit_copy" ] || continue
@@ -13,9 +13,10 @@ if [ -d "{{ vade.app.paths.active_systemd_unit_copies }}" ]; then
       systemctl is-active --quiet "$unit_name" && systemctl stop "$unit_name"
       systemctl disable "$unit_name"
       rm "$installed_path"
-      systemctl daemon-reload
     fi
   done
+
+  systemctl daemon-reload
 fi
 
 # Downgrade or remove active deployment dir
@@ -27,7 +28,7 @@ fi
 rm -rf "{{ vade.app.paths.active_deployment }}"
 {% endif %}
 
-# Let Caddy know a previously deployed Caddyfile no longer exists
+# Let Caddy know that any previously deployed Caddyfile for this app no longer exists
 systemctl reload caddy
 
 ######
