@@ -45,10 +45,3 @@ files.file(
     mode="600",
 )
 
-files.directory(
-    name="Ensure active deployment exists",
-    path="{{ vade.app.paths.active_deployment }}",
-    user="{{ vade.app.username }}",
-    group="{{ vade.app.username }}",
-    mode="755",
-)

@@ -7,9 +7,8 @@
 ###
 
 {%- for unit in vade.app.systemd_units %}
-# This unit must not collide with a pre-existing, unmanaged unit file. If the installed
-# unit exists, the matching copy in our active deployment must exist too; otherwise the
-# installed unit is not ours.
+# This unit must not collide with a pre-existing, unmanaged unit file
+# (an existing unit is considered unmanaged if it has no copy in the app's active deployment)
 if host.get_fact(File, path="{{ unit.installed_path }}") and not host.get_fact(File, path="{{ unit.active_path }}"):
     raise DeployError(
         "Your application wants to install the systemd unit `{{ unit.name }}`, but "
@@ -18,6 +17,7 @@ if host.get_fact(File, path="{{ unit.installed_path }}") and not host.get_fact(F
     )
 {%- endfor %}
 {%- endif %}
+
 ###
 # Initialize deployment candidate
 ###
@@ -37,17 +37,11 @@ files.directory(
 )
 
 {% if vade.app.artifacts.local is defined %}
-if host.get_fact(Directory, path="{{ vade.app.paths.active_deployment }}/artifacts"):
-    server.shell(
-        name="Mirror artifacts from active deployment (to avoid retransferring them)",
-        commands=["cp -al {{ vade.app.paths.active_deployment }}/artifacts {{ vade.app.paths.candidate_deployment }}/artifacts"],
-    )
-
 files.rsync(
     name="Sync local artifacts to candidate deployment",
     src="{{ vade.app.artifacts.local }}/",
-    dest="{{ vade.app.paths.candidate_deployment }}/artifacts",
-    flags=["-a", "--delete"],
+    dest="{{ vade.app.artifacts.candidate }}",
+    flags=["-a", "--delete", "--link-dest={{ vade.app.artifacts.active }}"],
     _sudo=True,
     _sudo_user="{{ vade.app.username }}",
 )

@@ -5,7 +5,7 @@ VM_NAME=vade-test-vm
 
 # The tests we know how to run, in the order a full run executes them. Each
 # entry `foo-bar` maps to a `test_foo_bar` function defined below.
-ALL_TESTS=(static-site python-no-deps python-no-deps-overwrite guestbook guestbook-rollback goatcounter timer existing-user existing-systemd-unit invalid-systemd-unit invalid-caddyfile)
+ALL_TESTS=(static-site static-site-unchanged python-no-deps python-no-deps-overwrite guestbook guestbook-rollback goatcounter timer existing-user existing-systemd-unit invalid-systemd-unit invalid-caddyfile)
 
 usage() {
   cat <<EOF
@@ -131,6 +131,19 @@ test_static-site() {
   local response
   response=$(curl -fsSk --resolve static-site.example.com:443:"$VM_IP_ADDR" https://static-site.example.com/)
   assert_response_contains "Static site check" "<h1>Hello World</h1>" "$response"
+}
+
+test_static-site-unchanged() {
+  test_static-site
+  test_static-site
+
+  # There should be hardlinks, meaning that the second deploy reused the artifacts from the first
+  # one (instead of transfering them again over the network)
+  links=$(sudo incus exec vade-test-vm -- stat -c %h /opt/vade/apps/my-static-site/active-deployment/artifacts/index.html)
+  if [ "$links" -lt 2 ]; then
+    echo "index.html has no hardlinks (nlink=$links)" >&2
+    exit 1
+  fi
 }
 
 test_python-no-deps() {

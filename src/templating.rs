@@ -75,6 +75,10 @@ pub fn base_minijinja_context(
             format!("{active_deployment}/artifacts").into(),
         ),
         (
+            "vade.app.artifacts.candidate",
+            format!("{candidate_deployment}/artifacts").into(),
+        ),
+        (
             "vade.app.caddyfile.active",
             format!("{active_deployment}/Caddyfile").into(),
         ),
