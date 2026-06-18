@@ -137,9 +137,8 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
     env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)?;
-    env.add_template_owned("header.py.j2", HEADER_TEMPLATE)?;
-    env.add_template_owned("create-tasks.py.j2", SETUP_TASKS_TEMPLATE)?;
-    env.add_template_owned("deploy-tasks.py.j2", DEPLOY_TASKS_TEMPLATE)?;
+    env.add_template_owned("shared/header.py.j2", HEADER_TEMPLATE)?;
+    env.add_template_owned("shared/create-tasks.py.j2", CREATE_TASKS_TEMPLATE)?;
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
         let path = Path::new(path)
@@ -242,9 +241,9 @@ pub static SYSTEMD_WEBAPP_SERVICE: &str =
     include_str!("resources/systemd-unit-templates/webapp.service.j2");
 
 // Building blocks
-static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/header.py.j2");
-static SETUP_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/create-tasks.py.j2");
-static DEPLOY_TASKS_TEMPLATE: &str = include_str!("resources/pyinfra-templates/deploy-tasks.py.j2");
+static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/shared/header.py.j2");
+static CREATE_TASKS_TEMPLATE: &str =
+    include_str!("resources/pyinfra-templates/shared/create-tasks.py.j2");
 static PROMOTE_SCRIPT_TEMPLATE: &str =
     include_str!("resources/pyinfra-templates/deploy-promote.sh.j2");
 
@@ -303,30 +302,29 @@ mod tests {
     use crate::util::ResolvedPath;
     use std::str::FromStr;
 
-    fn test_render_registered(app_deployment: Option<&AppDeployment>, template: &str) {
+    fn test_render_deploy(app_deployment: &AppDeployment) {
         let context = base_minijinja_context(
             Path::new("/tmp/vadegen"),
             Some(&AppName::from_str("foo").unwrap()),
-            app_deployment,
+            Some(app_deployment),
         );
-        let env = base_minijinja_env().unwrap();
-        let template = env.get_template(template).unwrap();
-        template.render(context).unwrap();
+        let mut env = base_minijinja_env().unwrap();
+        render(&mut env, &context, "", DEPLOY_TEMPLATE.into()).unwrap();
     }
 
     #[test]
-    fn test_render_deploy_tasks_minimal() {
+    fn test_render_deploy_minimal() {
         let deployment = AppDeployment {
             artifacts: None,
             caddyfile: None,
             systemd_units: vec![],
             reserved_ports: 0,
         };
-        test_render_registered(Some(&deployment), "deploy-tasks.py.j2");
+        test_render_deploy(&deployment);
     }
 
     #[test]
-    fn test_render_deploy_tasks_full() {
+    fn test_render_deploy_full() {
         let deployment = AppDeployment {
             artifacts: Some(ResolvedPath::from_str("/my/local/artifacts")),
             caddyfile: Some(TemplateAndUserVars {
@@ -342,11 +340,18 @@ mod tests {
             }],
             reserved_ports: 0,
         };
-        test_render_registered(Some(&deployment), "deploy-tasks.py.j2");
+        test_render_deploy(&deployment);
     }
 
     #[test]
     fn test_render_create() {
-        test_render_registered(None, "create-tasks.py.j2");
+        let context = base_minijinja_context(
+            Path::new("/tmp/vadegen"),
+            Some(&AppName::from_str("foo").unwrap()),
+            None,
+        );
+        let env = base_minijinja_env().unwrap();
+        let template = env.get_template("shared/create-tasks.py.j2").unwrap();
+        template.render(context).unwrap();
     }
 }
