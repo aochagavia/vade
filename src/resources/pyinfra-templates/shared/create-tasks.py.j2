@@ -2,8 +2,9 @@
 # Sanity checks
 ###
 
-# The application's username must not collide with a pre-existing, unmanaged user.
-if "{{ vade.app.username }}" in host.get_fact(Users) and not host.get_fact(File, path="{{ vade.app.paths.system_users_entry }}"):
+# The app's username must not conflict with a pre-existing, unmanaged user
+# (the user is considered unmanaged if the app's home directory doesn't exist)
+if "{{ vade.app.username }}" in host.get_fact(Users) and not host.get_fact(Directory, path="{{ vade.app.paths.home }}"):
     raise DeployError(
         "Your application's name (`{{ vade.app.username }}`) conflicts with an existing user on the "
         "system. Please choose a different one and try again."
@@ -12,22 +13,6 @@ if "{{ vade.app.username }}" in host.get_fact(Users) and not host.get_fact(File,
 ###
 # Initialize application
 ###
-
-files.directory(
-    name="Ensure vade user directory exists",
-    path="{{ vade.app.paths.system_users_entry | dirname }}",
-    user="root",
-    group="root",
-    mode="755",
-)
-
-files.file(
-    name="Ensure app user is tracked",
-    path="{{ vade.app.paths.system_users_entry }}",
-    user="root",
-    group="root",
-    mode="644",
-)
 
 server.user(
     name="Ensure app user exists",
