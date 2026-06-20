@@ -1,7 +1,7 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
+use miette::{IntoDiagnostic, Report, bail};
 use minijinja::{Environment, Template, UndefinedBehavior, context};
-use rootcause::{Report, bail};
 use serde::de::Error;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -39,10 +39,6 @@ pub fn base_minijinja_context(
     let active_deployment = &format!("{home_dir}/active-deployment");
     let candidate_deployment = &format!("{home_dir}/candidate-deployment");
     variables.extend([
-        (
-            "vade.app.paths.system_users_entry",
-            format!("/opt/vade/system_users/{username}").into(),
-        ),
         ("vade.app.name", app_name.as_str().into()),
         ("vade.app.username", username.into()),
         ("vade.app.paths.home", home_dir.into()),
@@ -65,7 +61,7 @@ pub fn base_minijinja_context(
         ),
         (
             "vade.app.paths.active_systemd_unit_copies",
-            format!("{active_deployment}/systemd_unit_copies").into(),
+            format!("{active_deployment}/systemd-unit-copies").into(),
         ),
         (
             "vade.app.artifacts.active",
@@ -137,9 +133,12 @@ pub fn base_minijinja_context(
 pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
-    env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)?;
-    env.add_template_owned("shared/header.py.j2", HEADER_TEMPLATE)?;
-    env.add_template_owned("shared/create-tasks.py.j2", CREATE_TASKS_TEMPLATE)?;
+    env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)
+        .into_diagnostic()?;
+    env.add_template_owned("shared/header.py.j2", HEADER_TEMPLATE)
+        .into_diagnostic()?;
+    env.add_template_owned("shared/create-tasks.py.j2", CREATE_TASKS_TEMPLATE)
+        .into_diagnostic()?;
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
         let path = Path::new(path)
@@ -165,7 +164,8 @@ pub fn render(
     let mut template_string = template.to_string();
     for i in 0..MAX_ITERATIONS {
         let template_name = format!("{template_name}{i}");
-        env.add_template_owned(template_name.clone(), template_string.clone())?;
+        env.add_template_owned(template_name.clone(), template_string.clone())
+            .into_diagnostic()?;
 
         // safety: we just added the template to the environment
         let template = env.get_template(&template_name).unwrap();

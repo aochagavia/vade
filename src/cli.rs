@@ -1,7 +1,6 @@
 use crate::app_name::AppName;
 use clap::{Parser, Subcommand};
-use rootcause::prelude::ResultExt;
-use rootcause::{Report, bail, report};
+use miette::{IntoDiagnostic, Report, WrapErr, bail, miette};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -88,11 +87,12 @@ impl FromStr for VarOverride {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (path, raw_value) = s.split_once('=').ok_or_else(|| {
-            report!("invalid override `{s}`: expected the format `<path>=<value>`")
+            miette!("invalid override `{s}`: expected the format `<path>=<value>`")
         })?;
 
         let json: serde_json::Value = serde_json::from_str(raw_value)
-            .context_with(|| format!("invalid JSON value in override `{s}`"))?;
+            .into_diagnostic()
+            .with_context(|| format!("invalid JSON value in override `{s}`"))?;
         let value = minijinja::Value::from_serialize(json);
 
         let (scope, name) = parse_path(path)?;
@@ -110,10 +110,10 @@ fn parse_path(path: &str) -> Result<(OverrideScope, String), Report> {
 
     if let Some(rest) = path.strip_prefix("systemd-unit[") {
         let (index, var_name) = rest.split_once("].vars.").ok_or_else(|| {
-            report!("invalid override path `{path}`: expected `systemd-unit[<index>].vars.<var>`")
+            miette!("invalid override path `{path}`: expected `systemd-unit[<index>].vars.<var>`")
         })?;
         let index: usize = index.parse().map_err(|_| {
-            report!("invalid override path `{path}`: `{index}` is not a valid systemd unit index")
+            miette!("invalid override path `{path}`: `{index}` is not a valid systemd unit index")
         })?;
         if var_name.is_empty() {
             bail!("invalid override path `{path}`: expected `systemd-unit[<index>].<var>`")

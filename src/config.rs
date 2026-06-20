@@ -3,15 +3,14 @@ use crate::templating::{
     CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE, TemplateAndUserVars,
 };
 use crate::util::RelativePathResolver;
-use rootcause::prelude::ResultExt;
-use rootcause::{Report, report};
+use miette::{IntoDiagnostic, Report, WrapErr, miette};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn load(path: &Path, uses_default_config_path: bool) -> Result<AppConfig, Report> {
-    let config_toml = fs::read_to_string(path).context_with(|| {
+    let config_toml = fs::read_to_string(path).into_diagnostic().with_context(|| {
         let mut msg = format!("failed to load configuration file at `{}`", path.display());
         if uses_default_config_path {
             msg.push_str("\n\nno custom path was provided, so the default path was used... did you forget to specify a custom path?");
@@ -20,11 +19,13 @@ pub fn load(path: &Path, uses_default_config_path: bool) -> Result<AppConfig, Re
         msg
     })?;
 
-    load_from_slice(&config_toml)
+    load_from_str(&config_toml)
 }
 
-fn load_from_slice(config_toml: &str) -> Result<AppConfig, Report> {
-    let config = toml::from_str(config_toml).context("invalid application configuration")?;
+fn load_from_str(config_toml: &str) -> Result<AppConfig, Report> {
+    let config = toml::from_str(config_toml)
+        .into_diagnostic()
+        .context("invalid application configuration")?;
     Ok(config)
 }
 
@@ -136,7 +137,7 @@ impl TemplateConfig {
         match &self.source {
             TemplateSource::Builtin(template_name) => {
                 let builtin = get_builtin(template_name)
-                    .ok_or(report!("unknown built-in {kind} template: {template_name}"))?;
+                    .ok_or(miette!("unknown built-in {kind} template: {template_name}"))?;
                 Ok(builtin.to_string())
             }
             TemplateSource::File(path) => {
@@ -244,6 +245,31 @@ mod tests {
     use std::assert_matches;
 
     #[test]
+    fn test_load_minimal() {
+        let config = load_from_str("").unwrap();
+        assert!(config.systemd_units.is_empty());
+        assert!(config.caddyfile.is_none());
+        assert!(config.artifacts.is_none());
+    }
+
+    #[test]
+    fn test_load_unknown_key_top_level() {
+        let config = load_from_str("asdf = 42");
+        assert!(config.is_err());
+    }
+
+    //     #[test]
+    //     fn test_load_unknown_key_systemd_unit() {
+    //         let config = load_from_str(r#"
+    // [[systemd-unit]]
+    // [systemd-unit.template]
+    // builtin = "webapp.service"
+    // asdf = 42
+    // "#);
+    //         assert!(config.is_err());
+    //     }
+
+    #[test]
     fn test_load_single_unit() {
         let src = r#"
 [artifacts]
@@ -266,7 +292,7 @@ vars = {
 }
 "#;
 
-        let config = load_from_slice(src).unwrap();
+        let config = load_from_str(src).unwrap();
         assert_eq!(
             config.artifacts.unwrap().path.to_string_lossy(),
             "artifacts"
@@ -326,7 +352,7 @@ WantedBy=timers.target
 """
 "#;
 
-        let config = load_from_slice(src).unwrap();
+        let config = load_from_str(src).unwrap();
         assert!(config.artifacts.is_none());
         assert_eq!(config.network.reserve_ports, 0);
         assert_eq!(config.systemd_units.len(), 2);

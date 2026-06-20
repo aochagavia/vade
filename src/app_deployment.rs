@@ -3,7 +3,7 @@ use crate::cli::{OverrideScope, VarOverride};
 use crate::config::AppConfig;
 use crate::templating::TemplateAndUserVars;
 use crate::util::{RelativePathResolver, ResolvedPath};
-use rootcause::{Report, report};
+use miette::{Report, miette};
 
 pub struct AppDeployment {
     pub artifacts: Option<ResolvedPath>,
@@ -33,7 +33,7 @@ impl AppDeployment {
         if let Some(artifacts_dir) = &artifacts_dir
             && !artifacts_dir.is_dir()
         {
-            return Err(report!(
+            return Err(miette!(
                 "the provided artifacts directory does not exist or is not a directory (check the path at `{}`)",
                 artifacts_dir.display()
             ));
@@ -82,7 +82,7 @@ fn apply_overrides(
                 &mut caddyfile
                     .as_deref_mut()
                     .ok_or_else(|| {
-                        report!(
+                        miette!(
                             "override targets `caddyfile`, but the configuration has no `[caddyfile]` section"
                         )
                     })?
@@ -92,7 +92,7 @@ fn apply_overrides(
                 &mut systemd_units
                     .get_mut(index)
                     .ok_or_else(|| {
-                        report!(
+                        miette!(
                             "override targets `systemd-unit[{index}]`, which doesn't exist")
                     })?
                     .template

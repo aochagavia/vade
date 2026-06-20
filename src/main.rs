@@ -13,8 +13,7 @@ use app_deployment::AppDeployment;
 use clap::Parser;
 use cli::{Cli, Command, DeployCommand};
 use commands::{create, deploy};
-use rootcause::Report;
-use rootcause::prelude::ResultExt;
+use miette::{IntoDiagnostic, Report, WrapErr};
 use std::fs;
 use std::path::Path;
 
@@ -57,5 +56,7 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
 }
 
 fn read_file(path: &Path) -> Result<String, Report> {
-    Ok(fs::read_to_string(path).context(format!("failed to load file at `{}`", path.display()))?)
+    fs::read_to_string(path)
+        .into_diagnostic()
+        .context(format!("failed to load file at `{}`", path.display()))
 }

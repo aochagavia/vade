@@ -2,9 +2,8 @@ use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
 use crate::templating;
 use crate::templating::DEPLOY_TEMPLATE;
+use miette::{IntoDiagnostic, Report, WrapErr};
 use minijinja::context;
-use rootcause::Report;
-use rootcause::prelude::ResultExt;
 use std::fs;
 use std::path::{self, PathBuf};
 
@@ -25,12 +24,14 @@ impl Deploy {
     }
 
     pub fn execute(self) -> Result<(), Report> {
-        fs::create_dir_all(&self.out_dir).context_with(|| {
-            format!(
-                "failed to create output directory at `{}`",
-                self.out_dir.display()
-            )
-        })?;
+        fs::create_dir_all(&self.out_dir)
+            .into_diagnostic()
+            .with_context(|| {
+                format!(
+                    "failed to create output directory at `{}`",
+                    self.out_dir.display()
+                )
+            })?;
 
         let context = self.get_minijinja_context();
         let mut env = templating::base_minijinja_env()?;
@@ -50,6 +51,7 @@ impl Deploy {
             .context("invalid jinja2 template for systemd unit")?;
 
             fs::write(self.out_dir.join(&systemd_unit.name), rendered)
+                .into_diagnostic()
                 .context("failed to write systemd unit")?;
         }
 
@@ -64,6 +66,7 @@ impl Deploy {
                     .context("invalid jinja2 template for Caddyfile")?;
 
             fs::write(self.out_dir.join("Caddyfile"), rendered)
+                .into_diagnostic()
                 .context("failed to write caddyfile")?;
         }
 
@@ -72,6 +75,7 @@ impl Deploy {
         let deploy =
             templating::render(&mut env, &context, "deploy.py.j2", DEPLOY_TEMPLATE.into()).unwrap();
         fs::write(self.out_dir.join("execute.py"), deploy)
+            .into_diagnostic()
             .context("failed to write pyinfra deploy")?;
 
         Ok(())
