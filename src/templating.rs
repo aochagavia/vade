@@ -99,8 +99,8 @@ pub fn base_minijinja_context(
         units.push(context! {
             name => unit.name,
             local_path => format!("{out_dir_abs_str}/{}", unit.name),
-            candidate_path => format!("{candidate_deployment}/systemd_unit_copies/{}", unit.name),
-            active_path => format!("{active_deployment}/systemd_unit_copies/{}", unit.name),
+            candidate_path => format!("{candidate_deployment}/systemd-unit-copies/{}", unit.name),
+            active_path => format!("{active_deployment}/systemd-unit-copies/{}", unit.name),
             installed_path => format!("/etc/systemd/system/{}", unit.name)
         })
     }
