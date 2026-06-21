@@ -3,6 +3,10 @@ Description={{ vade.app.name }} (web application)
 After=network-online.target
 Wants=network-online.target
 
+# Auto-restart rate limit
+StartLimitIntervalSec=30s
+StartLimitBurst=4
+
 [Service]
 Type=simple
 ExecStart={{ vars.exec_start }}
@@ -20,11 +24,9 @@ Environment="{{ key }}={{ vars.extra_env_vars[key] }}"
 {%- endfor %}
 {%- endif %}
 
-# Auto-restart (within limits)
+# Auto-restart
 Restart=on-failure
 RestartSec=3s
-StartLimitIntervalSec=30s
-StartLimitBurst=4
 
 # Restrict filesystem access
 PrivateTmp=true
