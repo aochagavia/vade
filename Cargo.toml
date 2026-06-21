@@ -15,3 +15,6 @@ minijinja = { version = "2.14.0", features = ["loader"] }
 serde_json = "1.0.150"
 toml-span = "0.7.1"
 miette = { version = "7.6.0", features = ["fancy"] }
+
+[dev-dependencies]
+insta = "1.48.0"

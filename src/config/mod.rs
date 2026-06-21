@@ -60,8 +60,6 @@ fn load_from_str(
 pub struct AppConfig {
     /// Configuration related to the project's artifacts
     artifacts: Option<Spanned<ArtifactsConfig>>,
-    /// Configuration related to the network
-    network: Option<Spanned<NetworkConfig>>,
     /// Configuration related to the project's Caddyfile (if any)
     caddyfile: Option<Spanned<CaddyfileConfig>>,
     /// Configuration related to the project's systemd units (if any)
@@ -80,14 +78,6 @@ impl AppConfig {
     pub fn systemd_units(&self) -> impl ExactSizeIterator<Item = &SystemdUnitConfig> {
         self.systemd_units.iter().map(|u| &u.value)
     }
-
-    pub fn reserved_ports(&self) -> u32 {
-        self.network
-            .as_ref()
-            .and_then(|n| n.value.reserve_ports.as_ref())
-            .map(|p| p.value)
-            .unwrap_or_default()
-    }
 }
 
 pub struct ArtifactsConfig {
@@ -101,12 +91,6 @@ impl ArtifactsConfig {
     pub fn path(&self) -> &Path {
         &self.path.value
     }
-}
-
-#[derive(Default)]
-pub struct NetworkConfig {
-    /// The number of ports that vade should reserve for this application
-    reserve_ports: Option<Spanned<u32>>,
 }
 
 pub struct SystemdUnitConfig {
@@ -314,9 +298,6 @@ asdf = 42
     #[test]
     fn test_load_reports_all_problems_with_spans() {
         let src = r#"
-[network]
-reserve-ports = "not-a-number"
-
 [[systemd-unit]]
 [systemd-unit.template]
 builtin = "webapp.service"
@@ -338,7 +319,6 @@ typo-key = 1
             .filter_map(|l| l.label().map(str::to_string))
             .collect();
 
-        assert!(labels.iter().any(|l| l == "expected u32, found string"));
         // Both conflicting sources are flagged
         assert_eq!(
             labels
@@ -410,9 +390,6 @@ inline = "second"
 [artifacts]
 path = "artifacts"
 
-[network]
-reserve-ports = 1
-
 [[systemd-unit]]
 [systemd-unit.template]
 builtin = "webapp.service"
@@ -432,7 +409,6 @@ vars = {
             config.artifacts().unwrap().path().to_string_lossy(),
             "artifacts"
         );
-        assert_eq!(config.reserved_ports(), 1);
         assert_eq!(config.systemd_units().len(), 1);
         assert!(config.caddyfile().is_some());
 
@@ -495,7 +471,6 @@ WantedBy=timers.target
 
         let config = test_load_from_str(src).unwrap();
         assert!(config.artifacts().is_none());
-        assert_eq!(config.reserved_ports(), 0);
         assert_eq!(config.systemd_units().len(), 2);
         assert!(config.caddyfile().is_none());
 

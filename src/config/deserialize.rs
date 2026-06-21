@@ -1,6 +1,6 @@
 use crate::config;
 use crate::config::{
-    AppConfig, ArtifactsConfig, CaddyfileConfig, NetworkConfig, SystemdUnitConfig, TemplateConfig,
+    AppConfig, ArtifactsConfig, CaddyfileConfig, SystemdUnitConfig, TemplateConfig,
     TemplateSource,
 };
 use miette::{LabeledSpan, Report, SourceCode, miette};
@@ -14,14 +14,12 @@ impl<'de> Deserialize<'de> for AppConfig {
     fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
         let mut th = TableHelper::new(value)?;
         let artifacts = th.optional_s("artifacts");
-        let network = th.optional_s("network");
         let caddyfile = th.optional_s("caddyfile");
         let systemd_units = th.optional("systemd-unit").unwrap_or_default();
         th.finalize(None)?;
 
         Ok(AppConfig {
             artifacts,
-            network,
             caddyfile,
             systemd_units,
         })
@@ -36,16 +34,6 @@ impl<'de> Deserialize<'de> for ArtifactsConfig {
         th.finalize(None)?;
 
         Ok(ArtifactsConfig { path: path?.map() })
-    }
-}
-
-impl<'de> Deserialize<'de> for NetworkConfig {
-    fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
-        let mut th = TableHelper::new(value)?;
-        let reserve_ports = th.optional_s("reserve-ports");
-        th.finalize(None)?;
-
-        Ok(NetworkConfig { reserve_ports })
     }
 }
 

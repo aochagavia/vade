@@ -1,10 +1,10 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
-use miette::{IntoDiagnostic, Report, bail};
-use minijinja::{Environment, Template, UndefinedBehavior, context};
+use miette::{LabeledSpan, NamedSource, Report, bail, miette};
+use minijinja::{Environment, UndefinedBehavior, context};
 use serde::de::Error;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 pub struct TemplateAndUserVars {
@@ -21,11 +21,11 @@ pub fn base_minijinja_context(
 
     let mut variables: Vec<(_, minijinja::Value)> = vec![
         (
-            "vade.internal.reserve_ports_script.local",
+            "vade.internal.assign_ports_script.local",
             out_dir_abs.join("assign-ports.py").to_string_lossy().into(),
         ),
         (
-            "vade.internal.reserve_ports_script.remote",
+            "vade.internal.assign_ports_script.remote",
             "/opt/vade/scripts/assign-ports.py".into(),
         ),
     ];
@@ -81,19 +81,6 @@ pub fn base_minijinja_context(
         return build_minijinja_value(variables);
     };
 
-    // The actual port number for each reserved port is only known at deploy time, on the
-    // server. For that reason, port variables resolve to themselves: they will stay in the
-    // file even after rendering, so the variable can be replaced on the server.
-    let app_ports_values: Vec<_> = (0..deployment.reserved_ports)
-        .map(|i| format!("{{{{ {APP_PORTS_VAR}[{i}] }}}}"))
-        .collect();
-
-    variables.extend([(APP_PORTS_VAR, app_ports_values.into())]);
-
-    if deployment.reserved_ports > 0 {
-        variables.extend([(APP_PORT_VAR, format!("{{{{ {APP_PORT_VAR} }}}}").into())]);
-    }
-
     let mut units = Vec::new();
     for unit in &deployment.systemd_units {
         units.push(context! {
@@ -133,12 +120,15 @@ pub fn base_minijinja_context(
 pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
+
+    // Debug mode is necessary to get the necessary error information from minijinja into miette
+    env.set_debug(true);
     env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)
-        .into_diagnostic()?;
+        .map_err(|e| minijinja_error_to_report(&e))?;
     env.add_template_owned("shared/header.py.j2", HEADER_TEMPLATE)
-        .into_diagnostic()?;
+        .map_err(|e| minijinja_error_to_report(&e))?;
     env.add_template_owned("shared/create-tasks.py.j2", CREATE_TASKS_TEMPLATE)
-        .into_diagnostic()?;
+        .map_err(|e| minijinja_error_to_report(&e))?;
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
         let path = Path::new(path)
@@ -147,6 +137,15 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
         Ok(path.display().to_string())
     }
     env.add_filter("dirname", dirname);
+
+    fn named_port(name: &str) -> Result<String, minijinja::Error> {
+        if name.chars().any(|c| c == '"') {
+            return Err(minijinja::Error::custom(r#"port names may not contain the `"` character "#));
+        }
+
+        Ok(format!(r#"{{{{ named_port("{name}") }}}}"#))
+    }
+    env.add_function("named_port", named_port);
 
     Ok(env)
 }
@@ -162,25 +161,16 @@ pub fn render(
     // We re-render the results of the previous render until we reach a fixpoint. This is to allow
     // for using variables inside other jinja variables.
     let mut template_string = template.to_string();
-    for i in 0..MAX_ITERATIONS {
-        let template_name = format!("{template_name}{i}");
-        env.add_template_owned(template_name.clone(), template_string.clone())
-            .into_diagnostic()?;
+    for _ in 0..MAX_ITERATIONS {
+        env.add_template_owned(template_name, template_string.clone())
+            .map_err(|e| minijinja_error_to_report(&e))?;
 
         // safety: we just added the template to the environment
-        let template = env.get_template(&template_name).unwrap();
-
-        // raise a user-friendly error if there are undefined variables as a consequence of a bad
-        // configuration
-        if let Some((variable, message)) = explain_known_missing_vars(&template, context) {
-            bail!("The template uses variable `{variable}`, but {message}");
-        }
+        let template = env.get_template(template_name).unwrap();
 
         let rendered = match template.render(context) {
             Ok(s) => s,
-            Err(e) => {
-                bail!("{}\n{}", e, e.display_debug_info());
-            }
+            Err(e) => return Err(minijinja_error_to_report(&e)),
         };
 
         if template_string == rendered {
@@ -195,41 +185,59 @@ pub fn render(
     );
 }
 
-fn explain_known_missing_vars(
-    template: &Template,
-    context: &minijinja::Value,
-) -> Option<(String, String)> {
-    let mut context_keys = HashSet::new();
-    if let Some(context) = context.as_object()
-        && let Some(iterator) = context.try_iter_pairs()
-    {
-        for (key, _) in iterator {
-            if let Some(key) = key.as_str() {
-                context_keys.insert(key.to_string());
-            }
-        }
-    }
+fn minijinja_error_to_report(error: &minijinja::Error) -> Report {
+    let message = match error.detail() {
+        Some(detail) => format!("{}: {detail}", error.kind()),
+        None => error.kind().to_string(),
+    };
 
-    let expected_names = template.undeclared_variables(false);
-    for used_name in expected_names {
-        if context_keys.contains(&used_name) {
-            // Variable is present in the context
-            continue;
-        }
-
-        // Variable is undefined
-        match used_name.as_str() {
-            APP_PORT_VAR | APP_PORTS_VAR => return Some((used_name, "this variable is only available when the configuration's `network.reserve-ports` equals `1` or higher. Did you forget to set `network.reserve-ports` in your config file?".to_string())),
-            _ => continue,
+    if let (Some(source), Some(range)) = (error.template_source(), error.range()) {
+        let name = error.name().unwrap_or("template");
+        let hint = error_hint(error.kind(), source, range.clone());
+        let label = LabeledSpan::new_primary_with_span(Some(message), range);
+        let report = match hint {
+            Some(hint) => miette!(labels = vec![label], help = hint, "failed to render template"),
+            None => miette!(labels = vec![label], "failed to render template"),
         };
+        report.with_source_code(NamedSource::new(name, source.to_string()))
+    } else {
+        let location = match (error.name(), error.line()) {
+            (Some(name), Some(line)) => format!(" (in {name}:{line})"),
+            (Some(name), None) => format!(" (in {name})"),
+            _ => String::new(),
+        };
+        miette!("failed to render template: {message}{location}")
     }
-
-    None
 }
 
-// Variable names
-pub const APP_PORT_VAR: &str = "vade.app.network.port";
-pub const APP_PORTS_VAR: &str = "vade.app.network.ports";
+fn error_hint(kind: minijinja::ErrorKind, source: &str, range: std::ops::Range<usize>) -> Option<String> {
+    let snippet = source.get(range.clone())?;
+    missing_user_var_hint(kind, snippet)
+}
+
+// When an undefined-variable error refers to a `vars.*` expression, returns a hint telling the user
+// to declare that variable in their `vade.toml`.
+fn missing_user_var_hint(kind: minijinja::ErrorKind, expr: &str) -> Option<String> {
+    if kind != minijinja::ErrorKind::UndefinedError {
+        return None;
+    }
+
+    // Extract the top-level key out of an expression like `vars.foo`, `vars.foo.bar` or `vars.foo[0]`
+    let key: String = expr
+        .trim()
+        .strip_prefix("vars.")?
+        .chars()
+        .take_while(|c| *c != '.' && *c != '[')
+        .collect();
+    if key.is_empty() {
+        return None;
+    }
+
+    Some(format!(
+        "`{key}` is a user-defined variable. Declare it in your `vade.toml` under the relevant \
+         template's `vars`, e.g. `vars = {{ {key} = ... }}`."
+    ))
+}
 
 // Caddyfile templates
 pub static CADDYFILE_STATIC_FILES: &str =
@@ -303,6 +311,17 @@ mod tests {
     use crate::util::ResolvedPath;
     use std::str::FromStr;
 
+    // Renders a miette report (for use in insta snapshots)
+    fn render_report(err: &Report) -> String {
+        let mut out = String::new();
+        miette::GraphicalReportHandler::new()
+            .with_theme(miette::GraphicalTheme::unicode_nocolor())
+            .with_width(80)
+            .render_report(&mut out, &**err)
+            .unwrap();
+        out
+    }
+
     fn test_render_deploy(app_deployment: &AppDeployment) {
         let context = base_minijinja_context(
             Path::new("/tmp/vadegen"),
@@ -319,7 +338,6 @@ mod tests {
             artifacts: None,
             caddyfile: None,
             systemd_units: vec![],
-            reserved_ports: 0,
         };
         test_render_deploy(&deployment);
     }
@@ -339,9 +357,24 @@ mod tests {
                     user_vars: Default::default(),
                 },
             }],
-            reserved_ports: 0,
         };
         test_render_deploy(&deployment);
+    }
+
+    #[test]
+    fn test_missing_user_var_hint() {
+        use minijinja::ErrorKind;
+
+        // Only undefined errors in the `vars` namespace produce a hint
+        assert!(missing_user_var_hint(ErrorKind::UndefinedError, "vars.domains").is_some());
+        assert!(missing_user_var_hint(ErrorKind::UndefinedError, "vars.foo.bar").is_some());
+        assert!(missing_user_var_hint(ErrorKind::UndefinedError, "vars.list[0]").is_some());
+
+        // Not the `vars` namespace
+        assert!(missing_user_var_hint(ErrorKind::UndefinedError, "vade.app.unknown").is_none());
+        assert!(missing_user_var_hint(ErrorKind::UndefinedError, "vars").is_none());
+        // A different error kind (e.g. a syntax error) shouldn't trigger the hint
+        assert!(missing_user_var_hint(ErrorKind::SyntaxError, "vars.domains").is_none());
     }
 
     #[test]
@@ -354,5 +387,60 @@ mod tests {
         let env = base_minijinja_env().unwrap();
         let template = env.get_template("shared/create-tasks.py.j2").unwrap();
         template.render(context).unwrap();
+    }
+
+    #[test]
+    fn test_render_error() {
+        let context = base_minijinja_context(
+            Path::new("/tmp/vadegen"),
+            Some(&AppName::from_str("foo").unwrap()),
+            None,
+        );
+        let mut env = base_minijinja_env().unwrap();
+
+        let template = "hello {{ does_not_exist }}";
+        let Err(err) = render(&mut env, &context, "unit_file", template.into()) else {
+            panic!("expected rendering to fail");
+        };
+
+        insta::assert_snapshot!(render_report(&err), @"
+         × failed to render template
+          ╭─[unit_file:1:10]
+        1 │ hello {{ does_not_exist }}
+          ·          ───────┬──────
+          ·                 ╰── undefined value
+          ╰────
+        ");
+    }
+
+    #[test]
+    fn test_render_error_hints_at_missing_user_var() {
+        let context = base_minijinja_context(
+            Path::new("/tmp/vadegen"),
+            Some(&AppName::from_str("foo").unwrap()),
+            None,
+        );
+        let mut env = base_minijinja_env().unwrap();
+
+        // `vars.exec_start` is referenced but never declared in the (empty) `vars` namespace
+        let context = context! { vars => HashMap::<String, minijinja::Value>::new(), ..context };
+        let template = "ExecStart={{ vars.exec_start }}";
+        let Err(err) = render(&mut env, &context, "unit_file", template.into()) else {
+            panic!("expected rendering to fail");
+        };
+
+        // The rendered diagnostic points at the offending expression and hints at declaring the
+        // user variable in `vade.toml`.
+        insta::assert_snapshot!(render_report(&err), @"
+         × failed to render template
+          ╭─[unit_file:1:14]
+        1 │ ExecStart={{ vars.exec_start }}
+          ·              ───────┬───────
+          ·                     ╰── undefined value
+          ╰────
+         help: `exec_start` is a user-defined variable. Declare it in your
+               `vade.toml` under the relevant template's `vars`, e.g. `vars =
+               { exec_start = ... }`.
+        ");
     }
 }

@@ -2,19 +2,24 @@
 """Assign ports for a vade deployment, substituting templated placeholders in the provided files
 
 Usage:
-    assign-ports.py PORT_COUNT ACTIVE_PORTS_FILE CANDIDATE_DIR APP_USER [TEMPLATED_FILE ...]
+    assign-ports.py ACTIVE_PORTS_FILE CANDIDATE_DIR APP_USER [TEMPLATED_FILE ...]
 
 Each TEMPLATED_FILE is a path to a file that may contain port placeholders to substitute
 """
 
 import glob
 import os
+import re
 import shutil
 import sys
 
 # Each vade app records its assigned ports in this file
 ASSIGNED_PORTS_GLOB = "/opt/vade/apps/*/active-deployment/assigned-ports"
 FIRST_PORT = 8000
+
+# A port placeholder looks like `named_port("<name>")` (emitted by the `named_port`
+# jinja function). This captures the `<name>` part.
+NAMED_PORT_RE = re.compile(r'{{ named_port\("([^"]+)"\) }}')
 
 
 def read_ports(path):
@@ -34,6 +39,17 @@ def gather_taken_ports():
     return taken
 
 
+def gather_named_ports(templated_files):
+    """Return a list of port names that appear in the templated files, ordered alphabetically"""
+    names = set()
+    for path in templated_files:
+        with open(path) as f:
+            content = f.read()
+
+        names.update(NAMED_PORT_RE.findall(content))
+
+    return sorted(names)
+
 def choose_ports(reserve_count, active_ports, taken):
     """Pick the ports for this deployment."""
     # Reuse previously assigned ports if the count hasn't changed
@@ -51,23 +67,20 @@ def choose_ports(reserve_count, active_ports, taken):
 
 def substitute_placeholders(text, ports):
     """Replace the port placeholders in `text` with concrete port numbers."""
-    # `{{ vade.app.network.port }}` is shorthand for the first assigned port
-    text = text.replace("{{ vade.app.network.port }}", str(ports[0]))
-    # `{{ vade.app.network.ports[i] }}` refers to the i-th assigned port
-    for i, port in enumerate(ports):
-        text = text.replace("{{ vade.app.network.ports[" + str(i) + "] }}", str(port))
+    for name, port in ports:
+        text = text.replace('{{ named_port("' + name + '") }}', str(port))
     return text
 
 
 def main():
-    reserve_count = int(sys.argv[1])
-    active_ports_file = sys.argv[2]
-    candidate_dir = sys.argv[3]
-    app_user = sys.argv[4]
-    templated_files = sys.argv[5:]
+    active_ports_file = sys.argv[1]
+    candidate_dir = sys.argv[2]
+    app_user = sys.argv[3]
+    templated_files = sys.argv[4:]
 
+    port_names = gather_named_ports(templated_files)
     ports = choose_ports(
-        reserve_count,
+        len(port_names),
         read_ports(active_ports_file),
         gather_taken_ports(),
     )
@@ -85,7 +98,7 @@ def main():
         with open(path) as f:
             content = f.read()
         with open(path, "w") as f:
-            f.write(substitute_placeholders(content, ports))
+            f.write(substitute_placeholders(content, zip(port_names, ports)))
 
 
 if __name__ == "__main__":

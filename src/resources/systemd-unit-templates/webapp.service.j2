@@ -14,10 +14,7 @@ WorkingDirectory={{ vade.app.paths.storage }}
 User={{ vade.app.username }}
 Group={{ vade.app.username }}
 EnvironmentFile={{ vade.app.paths.secrets }}
-{%- if vade.app.network.ports is defined %}
-Environment="PORT={{ vade.app.network.ports[0] }}"
-Environment="PORTS={{ vade.app.network.ports | join(',') }}"
-{%- endif %}
+Environment="PORT={{ named_port(vars.port_name if vars.port_name is defined else "main") }}"
 {%- if vars.extra_env_vars is defined %}
 {%- for key in vars.extra_env_vars %}
 Environment="{{ key }}={{ vars.extra_env_vars[key] }}"

@@ -1,4 +1,4 @@
-use crate::config::{AppConfig, NetworkConfig, SystemdUnitConfig};
+use crate::config::{AppConfig, SystemdUnitConfig};
 use miette::{LabeledSpan, Report, SourceCode, miette};
 use std::collections::HashMap;
 use toml_span::{Span, Spanned};
@@ -41,7 +41,6 @@ impl ValidationErrors {
 pub fn validate(app_name: &str, config: &AppConfig) -> Result<(), ValidationErrors> {
     let mut errors = Vec::new();
 
-    check_network(config.network.as_ref(), &mut errors);
     check_unit_filenames(app_name, &config.systemd_units, &mut errors);
     check_duplicate_unit_filenames(app_name, &config.systemd_units, &mut errors);
 
@@ -51,25 +50,6 @@ pub fn validate(app_name: &str, config: &AppConfig) -> Result<(), ValidationErro
         // Report in source order
         errors.sort_by_key(|e| e.span.start);
         Err(ValidationErrors { errors })
-    }
-}
-
-fn check_network(network: Option<&Spanned<NetworkConfig>>, errors: &mut Vec<ValidationError>) {
-    let Some(network) = network else {
-        return;
-    };
-
-    let Some(ports) = network.value.reserve_ports.as_ref() else {
-        return;
-    };
-
-    // 100 ports ought to be enough for an app
-    let max = 100;
-    if ports.value > max {
-        errors.push(ValidationError {
-            message: format!("you can reserve at most {max} ports per application"),
-            span: ports.span,
-        });
     }
 }
 

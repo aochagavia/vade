@@ -69,22 +69,19 @@ files.put(
 )
 {% endif %}
 
-{% if vade.app.network.ports %}
 ###
-# Reserve ports and bake them into the candidate's files
+# Assign ports and bake them into the candidate's files (if necessary)
 ###
-
 if not host.get_fact(Which, command="python3"):
     raise DeployError(
-        "vade needs `python3` on the target host to reserve ports for `{{ vade.app.name }}`, "
+        "vade needs `python3` on the target host to assign ports for `{{ vade.app.name }}`, "
         "but it was not found. Please install python3 and try again."
     )
 
 server.shell(
-    name="Reserve ports and substitute them into the candidate's templated files",
+    name="Assign ports and substitute them into the candidate's templated files",
     commands=[
-        "python3 {{ vade.internal.reserve_ports_script.remote }}"
-        " {{ vade.app.network.ports | length }}"
+        "python3 {{ vade.internal.assign_ports_script.remote }}"
         " {{ vade.app.paths.active_deployment }}/assigned-ports"
         " {{ vade.app.paths.candidate_deployment }}"
         " {{ vade.app.username }}"
@@ -96,7 +93,6 @@ server.shell(
         {%- endfor %}
     ],
 )
-{% endif %}
 
 files.directory(
     name="Delete previous deployment",

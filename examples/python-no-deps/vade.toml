@@ -1,9 +1,6 @@
 [artifacts]
 path = "artifacts"
 
-[network]
-reserve-ports = 1
-
 [caddyfile.template]
 builtin = "reverse-proxy"
 vars = {

@@ -2,7 +2,7 @@
 
 files.directory(
     name="Ensure vade scripts directory exists",
-    path="{{ vade.internal.reserve_ports_script.remote | dirname }}",
+    path="{{ vade.internal.assign_ports_script.remote | dirname }}",
     user="root",
     group="root",
     mode="755",
@@ -10,8 +10,8 @@ files.directory(
 
 files.put(
     name="Install the port-reservation script",
-    src="{{ vade.internal.reserve_ports_script.local }}",
-    dest="{{ vade.internal.reserve_ports_script.remote }}",
+    src="{{ vade.internal.assign_ports_script.local }}",
+    dest="{{ vade.internal.assign_ports_script.remote }}",
     user="root",
     group="root",
     mode="755",

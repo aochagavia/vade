@@ -48,7 +48,7 @@ impl Deploy {
                 "unit_file",
                 systemd_unit.template.template.clone().into(),
             )
-            .context("invalid jinja2 template for systemd unit")?;
+            .context("failed to render jinja2 template for systemd unit")?;
 
             fs::write(self.out_dir.join(&systemd_unit.name), rendered)
                 .into_diagnostic()
@@ -63,7 +63,7 @@ impl Deploy {
             };
             let rendered =
                 templating::render(&mut env, &context, "caddyfile", caddyfile.template.into())
-                    .context("invalid jinja2 template for Caddyfile")?;
+                    .context("failed to render jinja2 template for Caddyfile")?;
 
             fs::write(self.out_dir.join("Caddyfile"), rendered)
                 .into_diagnostic()

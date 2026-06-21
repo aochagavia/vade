@@ -9,7 +9,6 @@ pub struct AppDeployment {
     pub artifacts: Option<ResolvedPath>,
     pub caddyfile: Option<TemplateAndUserVars>,
     pub systemd_units: Vec<SystemdUnit>,
-    pub reserved_ports: u32,
 }
 
 pub struct SystemdUnit {
@@ -61,7 +60,6 @@ impl AppDeployment {
             artifacts: artifacts_dir,
             caddyfile,
             systemd_units,
-            reserved_ports: config.reserved_ports(),
         })
     }
 }

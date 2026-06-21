@@ -161,11 +161,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_scope() {
-        assert!(VarOverride::from_str("network.reserve-ports=1").is_err());
-    }
-
-    #[test]
     fn rejects_invalid_index() {
         assert!(VarOverride::from_str("systemd-unit[x].vars.foo=1").is_err());
         assert!(VarOverride::from_str("systemd-unit[0.foo=1").is_err());
