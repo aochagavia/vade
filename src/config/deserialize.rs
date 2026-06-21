@@ -1,7 +1,6 @@
 use crate::config;
 use crate::config::{
-    AppConfig, ArtifactsConfig, CaddyfileConfig, SystemdUnitConfig, TemplateConfig,
-    TemplateSource,
+    AppConfig, ArtifactsConfig, CaddyfileConfig, SystemdUnitConfig, TemplateConfig, TemplateSource,
 };
 use miette::{LabeledSpan, Report, SourceCode, miette};
 use std::collections::HashMap;
@@ -100,14 +99,12 @@ impl<'de> Deserialize<'de> for TemplateConfig {
 impl<'de> Deserialize<'de> for SystemdUnitConfig {
     fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
         let mut th = TableHelper::new(value)?;
-        let enable = th.optional_s("enable");
         let filename_suffix = th.optional_s("filename-suffix");
         let file_extension = th.optional_s("file-extension");
         let template = th.required_s("template");
         th.finalize(None)?;
 
         Ok(SystemdUnitConfig {
-            enable,
             filename_suffix,
             file_extension,
             template: template?,

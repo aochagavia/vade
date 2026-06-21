@@ -140,7 +140,9 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
 
     fn named_port(name: &str) -> Result<String, minijinja::Error> {
         if name.chars().any(|c| c == '"') {
-            return Err(minijinja::Error::custom(r#"port names may not contain the `"` character "#));
+            return Err(minijinja::Error::custom(
+                r#"port names may not contain the `"` character "#,
+            ));
         }
 
         Ok(format!(r#"{{{{ named_port("{name}") }}}}"#))
@@ -196,7 +198,11 @@ fn minijinja_error_to_report(error: &minijinja::Error) -> Report {
         let hint = error_hint(error.kind(), source, range.clone());
         let label = LabeledSpan::new_primary_with_span(Some(message), range);
         let report = match hint {
-            Some(hint) => miette!(labels = vec![label], help = hint, "failed to render template"),
+            Some(hint) => miette!(
+                labels = vec![label],
+                help = hint,
+                "failed to render template"
+            ),
             None => miette!(labels = vec![label], "failed to render template"),
         };
         report.with_source_code(NamedSource::new(name, source.to_string()))
@@ -210,7 +216,11 @@ fn minijinja_error_to_report(error: &minijinja::Error) -> Report {
     }
 }
 
-fn error_hint(kind: minijinja::ErrorKind, source: &str, range: std::ops::Range<usize>) -> Option<String> {
+fn error_hint(
+    kind: minijinja::ErrorKind,
+    source: &str,
+    range: std::ops::Range<usize>,
+) -> Option<String> {
     let snippet = source.get(range.clone())?;
     missing_user_var_hint(kind, snippet)
 }

@@ -1,6 +1,4 @@
 [[systemd-unit]]
-enable = false
-
 [systemd-unit.template]
 inline = """
 [Unit]

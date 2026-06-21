@@ -94,11 +94,6 @@ impl ArtifactsConfig {
 }
 
 pub struct SystemdUnitConfig {
-    /// Whether the unit should be automatically enabled after being deployed
-    ///
-    /// Defaults to `true`
-    #[allow(dead_code)]
-    enable: Option<Spanned<bool>>,
     /// The filename suffix of this systemd unit (if any)
     ///
     /// On the server, systemd unit file names need to be unique. To prevent collisions, unit names
@@ -442,8 +437,6 @@ vars = {
     fn test_load_two_units() {
         let src = r#"
 [[systemd-unit]]
-enable = false
-
 [systemd-unit.template]
 inline = """
 [Unit]
@@ -475,7 +468,6 @@ WantedBy=timers.target
         assert!(config.caddyfile().is_none());
 
         let systemd_config = config.systemd_units().next().unwrap();
-        assert!(systemd_config.enable.as_ref().is_some_and(|x| !x.value));
         assert_eq!(systemd_config.filename("my-app"), "my-app.service");
         assert_matches!(
             systemd_config.template.value.source.value,
@@ -484,7 +476,6 @@ WantedBy=timers.target
         assert_eq!(systemd_config.template.value.vars.value.len(), 0);
 
         let systemd_config = config.systemd_units().nth(1).unwrap();
-        assert!(systemd_config.enable.is_none());
         assert_eq!(systemd_config.filename("my-app"), "my-app.timer");
         assert_matches!(
             systemd_config.template.value.source.value,
