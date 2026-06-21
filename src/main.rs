@@ -36,7 +36,7 @@ fn server_setup(command: ServerSetupCommand) -> Result<(), Report> {
 fn deploy(command: DeployCommand) -> Result<(), Report> {
     let uses_default_config_path = command.configuration_file.is_none();
     let config_path = command.configuration_file.unwrap_or("vade.toml".into());
-    let config = config::load(&config_path, uses_default_config_path)?;
+    let config = config::load(&command.app_name, &config_path, uses_default_config_path)?;
 
     // safety: we know that config_path is a file, hence its path always has a parent
     let config_parent_path = config_path.parent().unwrap();

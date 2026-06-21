@@ -25,9 +25,8 @@ impl AppDeployment {
         path_resolver: &RelativePathResolver,
     ) -> Result<Self, Report> {
         let artifacts_dir = config
-            .artifacts
-            .as_ref()
-            .map(|artifacts| path_resolver.resolve(&artifacts.path));
+            .artifacts()
+            .map(|artifacts| path_resolver.resolve(artifacts.path()));
 
         // Sanity check artifacts dir
         if let Some(artifacts_dir) = &artifacts_dir
@@ -41,20 +40,16 @@ impl AppDeployment {
 
         // Load Caddyfile
         let mut caddyfile = config
-            .caddyfile
+            .caddyfile()
             .map(|c| c.load_template(path_resolver))
             .transpose()?;
 
         // Load systemd units
         let mut systemd_units = Vec::new();
-        for c in config.systemd_units {
+        for c in config.systemd_units() {
             let template = c.load_template(path_resolver)?;
-            let suffix = c
-                .filename_suffix
-                .map(|s| format!("-{s}"))
-                .unwrap_or_default();
             systemd_units.push(SystemdUnit {
-                name: format!("{}{suffix}.{}", app_name.as_str(), c.file_extension),
+                name: c.filename(app_name.as_str()),
                 template,
             });
         }
@@ -66,7 +61,7 @@ impl AppDeployment {
             artifacts: artifacts_dir,
             caddyfile,
             systemd_units,
-            reserved_ports: config.network.reserve_ports,
+            reserved_ports: config.reserved_ports(),
         })
     }
 }

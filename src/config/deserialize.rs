@@ -3,19 +3,19 @@ use crate::config::{
     AppConfig, ArtifactsConfig, CaddyfileConfig, NetworkConfig, SystemdUnitConfig, TemplateConfig,
     TemplateSource,
 };
-use miette::{LabeledSpan, NamedSource, Report, miette};
+use miette::{LabeledSpan, Report, SourceCode, miette};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use toml_span::de_helpers::{TableHelper, expected};
 use toml_span::value::ValueInner;
-use toml_span::{DeserError, Deserialize, Error, ErrorKind, Value};
+use toml_span::{DeserError, Deserialize, Error, ErrorKind, Spanned, Value};
 
 impl<'de> Deserialize<'de> for AppConfig {
     fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
         let mut th = TableHelper::new(value)?;
-        let artifacts = th.optional("artifacts");
-        let network = th.optional("network").unwrap_or_default();
-        let caddyfile = th.optional("caddyfile");
+        let artifacts = th.optional_s("artifacts");
+        let network = th.optional_s("network");
+        let caddyfile = th.optional_s("caddyfile");
         let systemd_units = th.optional("systemd-unit").unwrap_or_default();
         th.finalize(None)?;
 
@@ -32,19 +32,17 @@ impl<'de> Deserialize<'de> for ArtifactsConfig {
     fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
         let mut th = TableHelper::new(value)?;
         // Note: we defer using `?` to ensure we catch all possible errors
-        let path = th.required::<String>("path");
+        let path = th.required_s::<String>("path");
         th.finalize(None)?;
 
-        Ok(ArtifactsConfig {
-            path: PathBuf::from(path?),
-        })
+        Ok(ArtifactsConfig { path: path?.map() })
     }
 }
 
 impl<'de> Deserialize<'de> for NetworkConfig {
     fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
         let mut th = TableHelper::new(value)?;
-        let reserve_ports = th.optional("reserve-ports").unwrap_or(0);
+        let reserve_ports = th.optional_s("reserve-ports");
         th.finalize(None)?;
 
         Ok(NetworkConfig { reserve_ports })
@@ -61,9 +59,16 @@ impl<'de> Deserialize<'de> for TemplateConfig {
         let file = th.optional_s::<String>("file");
         let inline = th.optional_s::<String>("inline");
         let source = match (builtin, file, inline) {
-            (Some(b), None, None) => Some(TemplateSource::Builtin(b.value)),
-            (None, Some(f), None) => Some(TemplateSource::File(PathBuf::from(f.value))),
-            (None, None, Some(i)) => Some(TemplateSource::Inline(i.value)),
+            (Some(b), None, None) => {
+                Some(Spanned::with_span(TemplateSource::Builtin(b.value), b.span))
+            }
+            (None, Some(f), None) => Some(Spanned::with_span(
+                TemplateSource::File(PathBuf::from(f.value)),
+                f.span,
+            )),
+            (None, None, Some(i)) => {
+                Some(Spanned::with_span(TemplateSource::Inline(i.value), i.span))
+            }
             (None, None, None) => {
                 th.errors.push(Error {
                     kind: ErrorKind::Custom(
@@ -107,12 +112,10 @@ impl<'de> Deserialize<'de> for TemplateConfig {
 impl<'de> Deserialize<'de> for SystemdUnitConfig {
     fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
         let mut th = TableHelper::new(value)?;
-        let enable = th.optional("enable").unwrap_or(true);
-        let filename_suffix = th.optional("filename-suffix");
-        let file_extension = th
-            .optional("file-extension")
-            .unwrap_or_else(|| "service".to_string());
-        let template = th.required("template");
+        let enable = th.optional_s("enable");
+        let filename_suffix = th.optional_s("filename-suffix");
+        let file_extension = th.optional_s("file-extension");
+        let template = th.required_s("template");
         th.finalize(None)?;
 
         Ok(SystemdUnitConfig {
@@ -127,7 +130,7 @@ impl<'de> Deserialize<'de> for SystemdUnitConfig {
 impl<'de> Deserialize<'de> for CaddyfileConfig {
     fn deserialize(value: &mut Value<'de>) -> Result<Self, DeserError> {
         let mut th = TableHelper::new(value)?;
-        let template = th.required("template");
+        let template = th.required_s("template");
         th.finalize(None)?;
 
         // safety: when `template` is an error, `finalize` would have returned early
@@ -137,22 +140,13 @@ impl<'de> Deserialize<'de> for CaddyfileConfig {
     }
 }
 
-pub fn to_report(err: DeserError, config_toml: &str, config_path: Option<&Path>) -> Report {
+pub fn toml_error_to_report<S: SourceCode + 'static>(err: DeserError, source: S) -> Report {
     let mut labels = Vec::new();
     for e in &err.errors {
         labels.extend(error_labels(e));
     }
 
-    let report = miette!(labels = labels, "Failed to parse vade config file");
-    let config_toml = config_toml.to_string();
-    if let Some(path) = config_path
-        && let Ok(path) = path.canonicalize()
-    {
-        let path = path.display().to_string();
-        report.with_source_code(NamedSource::new(path, config_toml))
-    } else {
-        report.with_source_code(config_toml)
-    }
+    miette!(labels = labels, "Failed to parse vade config file").with_source_code(source)
 }
 
 fn error_labels(e: &Error) -> Vec<LabeledSpan> {
@@ -184,20 +178,24 @@ fn error_labels(e: &Error) -> Vec<LabeledSpan> {
 
 /// Reads the optional `vars` table, converting each value into a `minijinja::Value`
 ///
-/// Errors are recorded to the helper, instead of explicitly returned
-fn deserialize_vars_table(th: &mut TableHelper) -> HashMap<String, minijinja::Value> {
+/// Errors are recorded to the helper, instead of explicitly returned.
+fn deserialize_vars_table(th: &mut TableHelper) -> Spanned<HashMap<String, minijinja::Value>> {
     let Some((_, mut value)) = th.take("vars") else {
-        return HashMap::new();
+        return Spanned::new(HashMap::new());
     };
 
+    let span = value.span;
     match value.take() {
-        ValueInner::Table(table) => table
-            .into_iter()
-            .map(|(k, mut v)| (k.name.into_owned(), config::value_to_minijinja(v.take())))
-            .collect(),
+        ValueInner::Table(table) => Spanned::with_span(
+            table
+                .into_iter()
+                .map(|(k, mut v)| (k.name.into_owned(), config::value_to_minijinja(v.take())))
+                .collect(),
+            span,
+        ),
         other => {
-            th.errors.push(expected("a table", other, value.span));
-            HashMap::new()
+            th.errors.push(expected("a table", other, span));
+            Spanned::with_span(HashMap::new(), span)
         }
     }
 }
