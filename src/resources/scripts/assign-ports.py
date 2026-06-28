@@ -17,9 +17,9 @@ import sys
 ASSIGNED_PORTS_GLOB = "/opt/vade/apps/*/active-deployment/assigned-ports"
 FIRST_PORT = 8000
 
-# A port placeholder looks like `named_port("<name>")` (emitted by the `named_port`
+# A port placeholder looks like `port("<name>")` (emitted by the `port`
 # jinja function). This captures the `<name>` part.
-NAMED_PORT_RE = re.compile(r'{{ named_port\("([^"]+)"\) }}')
+NAMED_PORT_RE = re.compile(r'{{ port\("([^"]+)"\) }}')
 
 
 def read_ports(path):
@@ -68,7 +68,7 @@ def choose_ports(reserve_count, active_ports, taken):
 def substitute_placeholders(text, ports):
     """Replace the port placeholders in `text` with concrete port numbers."""
     for name, port in ports:
-        text = text.replace('{{ named_port("' + name + '") }}', str(port))
+        text = text.replace('{{ port("' + name + '") }}', str(port))
     return text
 
 

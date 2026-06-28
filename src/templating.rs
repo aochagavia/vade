@@ -138,16 +138,16 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     }
     env.add_filter("dirname", dirname);
 
-    fn named_port(name: &str) -> Result<String, minijinja::Error> {
+    fn port(name: &str) -> Result<String, minijinja::Error> {
         if name.chars().any(|c| c == '"') {
             return Err(minijinja::Error::custom(
                 r#"port names may not contain the `"` character "#,
             ));
         }
 
-        Ok(format!(r#"{{{{ named_port("{name}") }}}}"#))
+        Ok(format!(r#"{{{{ port("{name}") }}}}"#))
     }
-    env.add_function("named_port", named_port);
+    env.add_function("port", port);
 
     Ok(env)
 }

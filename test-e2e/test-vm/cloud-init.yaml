@@ -9,7 +9,6 @@ users:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM+b3uHx1rXWrQ5AqSwEBVnka4G5gyqELy8uXKJqRd3E test@example.com
 
 # Images often ship without an SSH server and without rsync, so make sure we have them
-# package_update: true
 packages:
   - openssh-server
   - rsync
