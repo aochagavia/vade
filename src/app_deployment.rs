@@ -1,7 +1,7 @@
 use crate::app_name::AppName;
 use crate::cli::{OverrideScope, VarOverride};
 use crate::config::AppConfig;
-use crate::templating::TemplateAndUserVars;
+use crate::config::TemplateAndUserVars;
 use crate::util::{RelativePathResolver, ResolvedPath};
 use miette::{Report, miette};
 
@@ -93,7 +93,7 @@ fn apply_overrides(
             }
         };
 
-        user_vars.insert(var_override.name.clone(), var_override.value.clone());
+        user_vars.set(var_override.name.clone(), var_override.value.clone());
     }
 
     Ok(())

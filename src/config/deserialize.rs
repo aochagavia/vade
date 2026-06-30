@@ -1,6 +1,6 @@
-use crate::config;
 use crate::config::{
     AppConfig, ArtifactsConfig, CaddyfileConfig, SystemdUnitConfig, TemplateConfig, TemplateSource,
+    UserVar,
 };
 use miette::{LabeledSpan, Report, SourceCode, miette};
 use std::collections::HashMap;
@@ -161,10 +161,10 @@ fn error_labels(e: &Error) -> Vec<LabeledSpan> {
     }
 }
 
-/// Reads the optional `vars` table, converting each value into a `minijinja::Value`
+/// Reads the optional `vars` table, converting each value into a `UserVar`
 ///
 /// Errors are recorded to the helper, instead of explicitly returned.
-fn deserialize_vars_table(th: &mut TableHelper) -> Spanned<HashMap<String, minijinja::Value>> {
+fn deserialize_vars_table(th: &mut TableHelper) -> Spanned<HashMap<String, UserVar>> {
     let Some((_, mut value)) = th.take("vars") else {
         return Spanned::new(HashMap::new());
     };
@@ -174,7 +174,7 @@ fn deserialize_vars_table(th: &mut TableHelper) -> Spanned<HashMap<String, minij
         ValueInner::Table(table) => Spanned::with_span(
             table
                 .into_iter()
-                .map(|(k, mut v)| (k.name.into_owned(), config::value_to_minijinja(v.take())))
+                .map(|(k, v)| (k.name.into_owned(), UserVar::from_toml(v)))
                 .collect(),
             span,
         ),

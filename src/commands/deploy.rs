@@ -39,7 +39,7 @@ impl Deploy {
         // Systemd units
         for systemd_unit in &self.app_deployment.systemd_units {
             let context = context!(
-                vars => systemd_unit.template.user_vars,
+                vars => systemd_unit.template.user_vars.to_minijinja(),
                 ..context.clone(),
             );
             let rendered = templating::render(
@@ -58,7 +58,7 @@ impl Deploy {
         // Caddyfile
         if let Some(caddyfile) = self.app_deployment.caddyfile {
             let context = context! {
-                vars => caddyfile.user_vars,
+                vars => caddyfile.user_vars.to_minijinja(),
                 ..context.clone(),
             };
             let rendered =

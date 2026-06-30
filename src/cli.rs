@@ -1,4 +1,5 @@
 use crate::app_name::AppName;
+use crate::config::UserVar;
 use clap::{Parser, Subcommand};
 use miette::{IntoDiagnostic, Report, WrapErr, bail, miette};
 use std::path::PathBuf;
@@ -79,7 +80,7 @@ pub enum OverrideScope {
 pub struct VarOverride {
     pub scope: OverrideScope,
     pub name: String,
-    pub value: minijinja::Value,
+    pub value: UserVar,
 }
 
 impl FromStr for VarOverride {
@@ -93,7 +94,7 @@ impl FromStr for VarOverride {
         let json: serde_json::Value = serde_json::from_str(raw_value)
             .into_diagnostic()
             .with_context(|| format!("invalid JSON value in override `{s}`"))?;
-        let value = minijinja::Value::from_serialize(json);
+        let value = UserVar::from_json(json);
 
         let (scope, name) = parse_path(path)?;
         Ok(VarOverride { scope, name, value })
@@ -135,7 +136,10 @@ mod tests {
         let o = VarOverride::from_str("caddyfile.vars.domains=[\"example.com\"]").unwrap();
         assert_eq!(o.scope, OverrideScope::Caddyfile);
         assert_eq!(o.name, "domains");
-        assert_eq!(o.value, minijinja::Value::from(vec!["example.com"]));
+        assert_eq!(
+            o.value,
+            UserVar::List(vec![UserVar::Scalar("example.com".into())])
+        );
     }
 
     #[test]
@@ -144,7 +148,7 @@ mod tests {
             .unwrap();
         assert_eq!(o.scope, OverrideScope::SystemdUnit(2));
         assert_eq!(o.name, "exec_start");
-        let expected = minijinja::Value::from("touch /tmp/i-was-here");
+        let expected = UserVar::Scalar("touch /tmp/i-was-here".into());
         assert_eq!(o.value, expected);
     }
 
@@ -152,7 +156,7 @@ mod tests {
     fn value_may_contain_equals_sign() {
         let o = VarOverride::from_str(r#"systemd-unit[0].vars.exec_start="run --flag=1""#).unwrap();
         assert_eq!(o.name, "exec_start");
-        assert_eq!(o.value, minijinja::Value::from("run --flag=1"));
+        assert_eq!(o.value, UserVar::Scalar("run --flag=1".into()));
     }
 
     #[test]

@@ -1,8 +1,6 @@
 use crate::app_name::AppName;
 use crate::read_file;
-use crate::templating::{
-    CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE, TemplateAndUserVars,
-};
+use crate::templating::{CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE};
 use crate::util::RelativePathResolver;
 use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr, miette};
 use std::collections::HashMap;
@@ -142,15 +140,12 @@ impl SystemdUnitConfig {
         &self,
         path_resolver: &RelativePathResolver,
     ) -> Result<TemplateAndUserVars, Report> {
-        let template =
-            self.template
-                .value
-                .load_template(path_resolver, "systemd unit", Self::get_builtin)?;
-
-        Ok(TemplateAndUserVars {
-            template,
-            user_vars: self.template.value.load_user_vars(),
-        })
+        load_template_inner(
+            &self.template.value,
+            path_resolver,
+            "systemd unit",
+            Self::get_builtin,
+        )
     }
 }
 
@@ -172,16 +167,29 @@ impl CaddyfileConfig {
         &self,
         path_resolver: &RelativePathResolver,
     ) -> Result<TemplateAndUserVars, Report> {
-        let template =
-            self.template
-                .value
-                .load_template(path_resolver, "Caddyfile", Self::get_builtin)?;
-
-        Ok(TemplateAndUserVars {
-            template,
-            user_vars: self.template.value.load_user_vars(),
-        })
+        load_template_inner(
+            &self.template.value,
+            path_resolver,
+            "Caddyfile",
+            Self::get_builtin,
+        )
     }
+}
+
+fn load_template_inner(
+    template_config: &TemplateConfig,
+    path_resolver: &RelativePathResolver,
+    template_kind: &str,
+    get_builtin: fn(&str) -> Option<&'static str>,
+) -> Result<TemplateAndUserVars, Report> {
+    let template = template_config.load_template(path_resolver, template_kind, get_builtin)?;
+
+    let vars = template_config.vars.clone();
+
+    Ok(TemplateAndUserVars {
+        template,
+        user_vars: UserVars::from_toml(vars.take()),
+    })
 }
 
 pub struct TemplateConfig {
@@ -198,7 +206,7 @@ pub struct TemplateConfig {
     ///
     /// These variables are placed under the `vars` object, so e.g., a variable called `domains`
     /// will be available at `vars.domains`
-    vars: Spanned<HashMap<String, minijinja::Value>>,
+    vars: Spanned<HashMap<String, UserVar>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -228,28 +236,92 @@ impl TemplateConfig {
             TemplateSource::Inline(s) => Ok(s.clone()),
         }
     }
+}
 
-    fn load_user_vars(&self) -> HashMap<String, minijinja::Value> {
-        self.vars.value.clone()
+pub struct TemplateAndUserVars {
+    pub template: String,
+    pub user_vars: UserVars,
+}
+
+#[derive(Default)]
+pub struct UserVars {
+    vars: HashMap<String, UserVar>,
+}
+
+impl UserVars {
+    fn from_toml(vars: HashMap<String, UserVar>) -> Self {
+        Self { vars }
+    }
+
+    pub fn set(&mut self, key: String, value: UserVar) {
+        // note: only top-level set is supported for now
+        self.vars.insert(key, value);
+    }
+
+    pub fn to_minijinja(&self) -> minijinja::Value {
+        self.vars
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.clone().into_minijinja()))
+            .collect()
     }
 }
 
-fn value_to_minijinja(value: ValueInner) -> minijinja::Value {
-    match value {
-        ValueInner::String(s) => s.into_owned().into(),
-        ValueInner::Integer(x) => x.into(),
-        ValueInner::Float(x) => x.into(),
-        ValueInner::Boolean(x) => x.into(),
-        ValueInner::Array(array) => {
-            minijinja::Value::from_iter(array.into_iter().map(|mut v| value_to_minijinja(v.take())))
-        }
-        ValueInner::Table(table) => {
-            let mut obj = HashMap::new();
-            for (k, mut v) in table {
-                obj.insert(k.name.into_owned(), value_to_minijinja(v.take()));
-            }
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum UserVar {
+    Scalar(minijinja::Value),
+    Object(HashMap<String, UserVar>),
+    List(Vec<UserVar>),
+}
 
-            minijinja::Value::from_object(obj)
+impl UserVar {
+    pub fn from_json(value: serde_json::Value) -> Self {
+        use serde_json::Value;
+        match value {
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+                Self::Scalar(minijinja::Value::from_serialize(value))
+            }
+            Value::Array(array) => Self::List(array.into_iter().map(UserVar::from_json).collect()),
+            Value::Object(object) => Self::Object(
+                object
+                    .into_iter()
+                    .map(|(k, v)| (k, UserVar::from_json(v)))
+                    .collect(),
+            ),
+        }
+    }
+
+    pub fn from_toml(mut value: toml_span::Value) -> Self {
+        match value.take() {
+            ValueInner::String(s) => Self::Scalar(s.into_owned().into()),
+            ValueInner::Integer(x) => Self::Scalar(x.into()),
+            ValueInner::Float(x) => Self::Scalar(x.into()),
+            ValueInner::Boolean(x) => Self::Scalar(x.into()),
+            ValueInner::Array(array) => {
+                Self::List(array.into_iter().map(UserVar::from_toml).collect())
+            }
+            ValueInner::Table(table) => Self::Object(
+                table
+                    .into_iter()
+                    .map(|(k, v)| (k.name.to_string(), UserVar::from_toml(v)))
+                    .collect(),
+            ),
+        }
+    }
+
+    pub fn into_minijinja(self) -> minijinja::Value {
+        match self {
+            UserVar::Scalar(s) => s,
+            UserVar::Object(o) => {
+                let mut obj = HashMap::new();
+                for (k, v) in o {
+                    obj.insert(k, v.into_minijinja());
+                }
+
+                minijinja::Value::from_object(obj)
+            }
+            UserVar::List(l) => {
+                minijinja::Value::from_iter(l.into_iter().map(|v| v.into_minijinja()))
+            }
         }
     }
 }
@@ -416,8 +488,8 @@ vars = {
         assert_eq!(systemd_config.template.value.vars.value.len(), 1);
         assert_eq!(
             systemd_config.template.value.vars.value["exec_start"],
-            minijinja::Value::from(
-                "{{ vade.app_paths.active_artifacts_dir }}/goatcounter serve -listen :{{ vade.app_port }}"
+            UserVar::Scalar(
+                "{{ vade.app_paths.active_artifacts_dir }}/goatcounter serve -listen :{{ vade.app_port }}".into()
             )
         );
 
@@ -429,7 +501,7 @@ vars = {
         assert_eq!(caddyfile_config.template.value.vars.value.len(), 1);
         assert_eq!(
             caddyfile_config.template.value.vars.value["domains"],
-            minijinja::Value::from(vec!["goats.example.com"])
+            UserVar::List(vec![UserVar::Scalar("goats.example.com".into())])
         );
     }
 

@@ -4,13 +4,8 @@ use miette::{LabeledSpan, NamedSource, Report, bail, miette};
 use minijinja::{Environment, UndefinedBehavior, context};
 use serde::de::Error;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::Path;
-
-pub struct TemplateAndUserVars {
-    pub template: String,
-    pub user_vars: HashMap<String, minijinja::Value>,
-}
 
 pub fn base_minijinja_context(
     out_dir_abs: &Path,
@@ -318,6 +313,7 @@ fn build_minijinja_value(vars: Vec<(&str, minijinja::Value)>) -> minijinja::Valu
 mod tests {
     use super::*;
     use crate::app_deployment::SystemdUnit;
+    use crate::config::{TemplateAndUserVars, UserVars};
     use crate::util::ResolvedPath;
     use std::str::FromStr;
 
@@ -433,7 +429,7 @@ mod tests {
         let mut env = base_minijinja_env().unwrap();
 
         // `vars.exec_start` is referenced but never declared in the (empty) `vars` namespace
-        let context = context! { vars => HashMap::<String, minijinja::Value>::new(), ..context };
+        let context = context! { vars => UserVars::default().to_minijinja(), ..context };
         let template = "ExecStart={{ vars.exec_start }}";
         let Err(err) = render(&mut env, &context, "unit_file", template.into()) else {
             panic!("expected rendering to fail");
