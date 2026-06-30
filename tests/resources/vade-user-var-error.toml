@@ -1,0 +1,12 @@
+[caddyfile.template]
+builtin = "reverse-proxy"
+vars = {
+  domains = ["goats.example.com"]
+}
+
+[[systemd-unit]]
+[systemd-unit.template]
+builtin = "webapp.service"
+vars = {
+  exec_start = "{{{ vade.app.artifacts.active }}/goatcounter serve -listen :{{ port('main') }}"
+}

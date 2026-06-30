@@ -1,6 +1,7 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
-use miette::{LabeledSpan, NamedSource, Report, bail, miette};
+use crate::config::{UserVarString, UserVarStringSource};
+use miette::{LabeledSpan, NamedSource, Report, miette};
 use minijinja::{Environment, UndefinedBehavior, context};
 use serde::de::Error;
 use std::borrow::Cow;
@@ -119,11 +120,11 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     // Debug mode is necessary to get the necessary error information from minijinja into miette
     env.set_debug(true);
     env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)
-        .map_err(|e| minijinja_error_to_report(&e))?;
+        .map_err(|e| minijinja_error_to_report(&e, None))?;
     env.add_template_owned("shared/header.py.j2", HEADER_TEMPLATE)
-        .map_err(|e| minijinja_error_to_report(&e))?;
+        .map_err(|e| minijinja_error_to_report(&e, None))?;
     env.add_template_owned("shared/create-tasks.py.j2", CREATE_TASKS_TEMPLATE)
-        .map_err(|e| minijinja_error_to_report(&e))?;
+        .map_err(|e| minijinja_error_to_report(&e, None))?;
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
         let path = Path::new(path)
@@ -147,60 +148,93 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     Ok(env)
 }
 
+pub fn render_user_var_string(
+    env: &mut Environment,
+    context: &minijinja::Value,
+    toml_config_str: &str,
+    user_var_string: &UserVarString,
+) -> Result<String, Report> {
+    env.add_template_owned("user-var-string", user_var_string.value.to_string())
+        .map_err(|e| minijinja_error_to_report(&e, Some((toml_config_str, user_var_string))))?;
+
+    // safety: we just added the template to the environment
+    let template = env.get_template("user-var-string").unwrap();
+    template
+        .render(context)
+        .map_err(|e| minijinja_error_to_report(&e, Some((toml_config_str, user_var_string))))
+}
+
 pub fn render(
     env: &mut Environment,
     context: &minijinja::Value,
     template_name: &'static str,
-    template: Cow<'static, str>,
+    template: Cow<'_, str>,
 ) -> Result<String, Report> {
-    const MAX_ITERATIONS: usize = 10;
+    env.add_template_owned(template_name, template.to_string())
+        .map_err(|e| minijinja_error_to_report(&e, None))?;
 
-    // We re-render the results of the previous render until we reach a fixpoint. This is to allow
-    // for using variables inside other jinja variables.
-    let mut template_string = template.to_string();
-    for _ in 0..MAX_ITERATIONS {
-        env.add_template_owned(template_name, template_string.clone())
-            .map_err(|e| minijinja_error_to_report(&e))?;
-
-        // safety: we just added the template to the environment
-        let template = env.get_template(template_name).unwrap();
-
-        let rendered = match template.render(context) {
-            Ok(s) => s,
-            Err(e) => return Err(minijinja_error_to_report(&e)),
-        };
-
-        if template_string == rendered {
-            return Ok(rendered);
-        } else {
-            template_string = rendered;
-        }
-    }
-
-    bail!(
-        "failed to reach a stable rendering of the template after {MAX_ITERATIONS} iterations, did you accidentally introduce infinite recursion in your template variables?"
-    );
+    // safety: we just added the template to the environment
+    let template = env.get_template(template_name).unwrap();
+    template
+        .render(context)
+        .map_err(|e| minijinja_error_to_report(&e, None))
 }
 
-fn minijinja_error_to_report(error: &minijinja::Error) -> Report {
+fn minijinja_error_to_report(
+    error: &minijinja::Error,
+    user_var_info: Option<(&str, &UserVarString)>,
+) -> Report {
     let message = match error.detail() {
         Some(detail) => format!("{}: {detail}", error.kind()),
         None => error.kind().to_string(),
     };
 
     if let (Some(source), Some(range)) = (error.template_source(), error.range()) {
-        let name = error.name().unwrap_or("template");
-        let hint = error_hint(error.kind(), source, range.clone());
-        let label = LabeledSpan::new_primary_with_span(Some(message), range);
-        let report = match hint {
-            Some(hint) => miette!(
-                labels = vec![label],
-                help = hint,
-                "failed to render template"
-            ),
-            None => miette!(labels = vec![label], "failed to render template"),
-        };
-        report.with_source_code(NamedSource::new(name, source.to_string()))
+        if let Some((config_toml, user_var)) = user_var_info {
+            match &user_var.source {
+                UserVarStringSource::Cli { path } => {
+                    let miette_source = user_var.value.clone();
+                    let label = LabeledSpan::new_primary_with_span(Some(message), range);
+                    let hint = format!(
+                        "this value was assigned to `{path}` through the `--var-json` flag"
+                    );
+                    miette!(
+                        labels = vec![label],
+                        help = hint,
+                        "failed to render user-provided string"
+                    )
+                    .with_source_code(miette_source)
+                }
+                UserVarStringSource::Toml(span) => {
+                    let miette_source = NamedSource::new("vade.toml", config_toml.to_string());
+
+                    // The `range` tells us where in the string the error is
+                    // The `span` tells us where in the config toml the string is
+                    let range = span.start + range.start..span.start + range.end;
+                    let label = LabeledSpan::new_primary_with_span(Some(message), range);
+                    miette!(
+                        labels = vec![label],
+                        "failed to render user-provided string"
+                    )
+                    .with_source_code(miette_source)
+                }
+            }
+        } else {
+            let name = error.name().unwrap_or("template");
+            let miette_source = NamedSource::new(name, source.to_string());
+            let hint = error_hint(error.kind(), source, range.clone());
+            let label = LabeledSpan::new_primary_with_span(Some(message), range);
+            match hint {
+                Some(hint) => miette!(
+                    labels = vec![label],
+                    help = hint,
+                    "failed to render template"
+                )
+                .with_source_code(miette_source),
+                None => miette!(labels = vec![label], "failed to render template")
+                    .with_source_code(miette_source),
+            }
+        }
     } else {
         let location = match (error.name(), error.line()) {
             (Some(name), Some(line)) => format!(" (in {name}:{line})"),
@@ -244,29 +278,6 @@ fn missing_user_var_hint(kind: minijinja::ErrorKind, expr: &str) -> Option<Strin
     ))
 }
 
-// Caddyfile templates
-pub static CADDYFILE_STATIC_FILES: &str =
-    include_str!("resources/caddyfile-templates/static-files.j2");
-pub static CADDYFILE_REVERSE_PROXY: &str =
-    include_str!("resources/caddyfile-templates/reverse-proxy.j2");
-
-// Systemd unit templates
-pub static SYSTEMD_WEBAPP_SERVICE: &str =
-    include_str!("resources/systemd-unit-templates/webapp.service.j2");
-
-// Building blocks
-static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/shared/header.py.j2");
-static CREATE_TASKS_TEMPLATE: &str =
-    include_str!("resources/pyinfra-templates/shared/create-tasks.py.j2");
-static PROMOTE_SCRIPT_TEMPLATE: &str =
-    include_str!("resources/pyinfra-templates/deploy-promote.sh.j2");
-
-// Full deploys
-pub static DEPLOY_TEMPLATE: &str = include_str!("resources/pyinfra-templates/deploy.py.j2");
-pub static CREATE_TEMPLATE: &str = include_str!("resources/pyinfra-templates/create.py.j2");
-pub static SERVER_SETUP_TEMPLATE: &str =
-    include_str!("resources/pyinfra-templates/server-setup.py.j2");
-
 // Variable names use dotted paths (e.g. `vade.app.name`) to express nesting. Here we transform
 // them into an actual tree.
 fn build_minijinja_value(vars: Vec<(&str, minijinja::Value)>) -> minijinja::Value {
@@ -309,12 +320,36 @@ fn build_minijinja_value(vars: Vec<(&str, minijinja::Value)>) -> minijinja::Valu
     into_value(root)
 }
 
+// Caddyfile templates
+pub static CADDYFILE_STATIC_FILES: &str =
+    include_str!("resources/caddyfile-templates/static-files.j2");
+pub static CADDYFILE_REVERSE_PROXY: &str =
+    include_str!("resources/caddyfile-templates/reverse-proxy.j2");
+
+// Systemd unit templates
+pub static SYSTEMD_WEBAPP_SERVICE: &str =
+    include_str!("resources/systemd-unit-templates/webapp.service.j2");
+
+// Building blocks
+static HEADER_TEMPLATE: &str = include_str!("resources/pyinfra-templates/shared/header.py.j2");
+static CREATE_TASKS_TEMPLATE: &str =
+    include_str!("resources/pyinfra-templates/shared/create-tasks.py.j2");
+static PROMOTE_SCRIPT_TEMPLATE: &str =
+    include_str!("resources/pyinfra-templates/deploy-promote.sh.j2");
+
+// Full deploys
+pub static DEPLOY_TEMPLATE: &str = include_str!("resources/pyinfra-templates/deploy.py.j2");
+pub static CREATE_TEMPLATE: &str = include_str!("resources/pyinfra-templates/create.py.j2");
+pub static SERVER_SETUP_TEMPLATE: &str =
+    include_str!("resources/pyinfra-templates/server-setup.py.j2");
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app_deployment::SystemdUnit;
     use crate::config::{TemplateAndUserVars, UserVars};
     use crate::util::ResolvedPath;
+    use minijinja::Value;
     use std::str::FromStr;
 
     // Renders a miette report (for use in insta snapshots)
@@ -328,12 +363,16 @@ mod tests {
         out
     }
 
-    fn test_render_deploy(app_deployment: &AppDeployment) {
-        let context = base_minijinja_context(
+    fn get_test_minijinja_context(deployment: Option<&AppDeployment>) -> Value {
+        base_minijinja_context(
             Path::new("/tmp/vadegen"),
             Some(&AppName::from_str("foo").unwrap()),
-            Some(app_deployment),
-        );
+            deployment,
+        )
+    }
+
+    fn test_render_deploy(app_deployment: &AppDeployment) {
+        let context = get_test_minijinja_context(Some(app_deployment));
         let mut env = base_minijinja_env().unwrap();
         render(&mut env, &context, "", DEPLOY_TEMPLATE.into()).unwrap();
     }
@@ -385,11 +424,7 @@ mod tests {
 
     #[test]
     fn test_render_create() {
-        let context = base_minijinja_context(
-            Path::new("/tmp/vadegen"),
-            Some(&AppName::from_str("foo").unwrap()),
-            None,
-        );
+        let context = get_test_minijinja_context(None);
         let env = base_minijinja_env().unwrap();
         let template = env.get_template("shared/create-tasks.py.j2").unwrap();
         template.render(context).unwrap();
@@ -397,11 +432,7 @@ mod tests {
 
     #[test]
     fn test_render_error() {
-        let context = base_minijinja_context(
-            Path::new("/tmp/vadegen"),
-            Some(&AppName::from_str("foo").unwrap()),
-            None,
-        );
+        let context = get_test_minijinja_context(None);
         let mut env = base_minijinja_env().unwrap();
 
         let template = "hello {{ does_not_exist }}";
@@ -421,15 +452,11 @@ mod tests {
 
     #[test]
     fn test_render_error_hints_at_missing_user_var() {
-        let context = base_minijinja_context(
-            Path::new("/tmp/vadegen"),
-            Some(&AppName::from_str("foo").unwrap()),
-            None,
-        );
+        let context = get_test_minijinja_context(None);
         let mut env = base_minijinja_env().unwrap();
 
         // `vars.exec_start` is referenced but never declared in the (empty) `vars` namespace
-        let context = context! { vars => UserVars::default().to_minijinja(), ..context };
+        let context = context! { vars => UserVars::default().into_minijinja(), ..context };
         let template = "ExecStart={{ vars.exec_start }}";
         let Err(err) = render(&mut env, &context, "unit_file", template.into()) else {
             panic!("expected rendering to fail");

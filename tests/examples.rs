@@ -105,6 +105,76 @@ fn deploy_rejects_out_of_range_unit_override() {
     );
 }
 
+#[test]
+fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/vade-user-var-error.toml");
+    let out = fresh_out_dir("invalid-user-string-in-toml-deploy");
+    let output = Command::new(VADE_BIN)
+        .args([
+            "deploy",
+            "test-app",
+            "--config",
+            path_arg(&config),
+            "--out-dir",
+            path_arg(&out),
+        ])
+        .output()
+        .expect("failed to run the vade binary");
+
+    assert!(
+        !output.status.success(),
+        "expected deploy to fail for an out-of-range systemd unit override"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stdout, @r#"
+    Error:   × failed to render user-provided string
+        ╭─[vade.toml:11:47]
+     10 │ vars = {
+     11 │   exec_start = "{{{ vade.app.artifacts.active }}/goatcounter serve -listen :{{ port('main') }}"
+        ·                                               ┬
+        ·                                               ╰── syntax error: unexpected `}`, expected `:`
+     12 │ }
+        ╰────
+    "#);
+}
+
+#[test]
+fn deploy_with_invalid_user_string_in_cli_flag_raises_error() {
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/goatcounter/vade.toml");
+    let out = fresh_out_dir("invalid-user-string-in-cli-deploy");
+    let output = Command::new(VADE_BIN)
+        .args([
+            "deploy",
+            "test-app",
+            "--config",
+            path_arg(&config),
+            "--out-dir",
+            path_arg(&out),
+            "--var-json",
+            "systemd-unit[0].vars.exec_start=\"hello {{ world }}\"",
+        ])
+        .output()
+        .expect("failed to run the vade binary");
+
+    assert!(
+        !output.status.success(),
+        "expected deploy to fail for an out-of-range systemd unit override"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stdout, @"
+    Error:   × failed to render user-provided string
+       ╭────
+     1 │ hello {{ world }}
+       ·          ──┬──
+       ·            ╰── undefined value
+       ╰────
+      help: this value was assigned to `systemd-unit[0].vars.exec_start` through
+            the `--var-json` flag
+    ");
+}
+
 // Collect every `vade.toml` file matching the glob pattern `examples/*/vade.toml`.
 fn example_configs() -> Vec<PathBuf> {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");

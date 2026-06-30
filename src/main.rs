@@ -36,23 +36,16 @@ fn server_setup(command: ServerSetupCommand) -> Result<(), Report> {
 fn deploy(command: DeployCommand) -> Result<(), Report> {
     let uses_default_config_path = command.configuration_file.is_none();
     let config_path = command.configuration_file.unwrap_or("vade.toml".into());
-    let config = config::load(&command.app_name, &config_path, uses_default_config_path)?;
+    let (config, config_str) =
+        config::load(&command.app_name, &config_path, uses_default_config_path)?;
 
     // safety: we know that config_path is a file, hence its path always has a parent
     let config_parent_path = config_path.parent().unwrap();
     let path_resolver = RelativePathResolver::with_root(config_parent_path.to_owned());
 
-    deploy::Deploy {
-        app_deployment: AppDeployment::from_config(
-            &command.app_name,
-            config,
-            &command.set_json,
-            &path_resolver,
-        )?,
-        app_name: command.app_name,
-        out_dir: command.out_dir,
-    }
-    .execute()
+    let deployment =
+        AppDeployment::from_config(&command.app_name, config, &command.set_json, &path_resolver)?;
+    deploy::execute(command.app_name, deployment, command.out_dir, &config_str)
 }
 
 fn read_file(path: &Path) -> Result<String, Report> {

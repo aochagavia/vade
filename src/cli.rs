@@ -91,12 +91,13 @@ impl FromStr for VarOverride {
             miette!("invalid override `{s}`: expected the format `<path>=<value>`")
         })?;
 
+        let (scope, name) = parse_path(path)?;
+
         let json: serde_json::Value = serde_json::from_str(raw_value)
             .into_diagnostic()
             .with_context(|| format!("invalid JSON value in override `{s}`"))?;
-        let value = UserVar::from_json(json);
+        let value = UserVar::from_json(path, json);
 
-        let (scope, name) = parse_path(path)?;
         Ok(VarOverride { scope, name, value })
     }
 }
@@ -130,6 +131,7 @@ fn parse_path(path: &str) -> Result<(OverrideScope, String), Report> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::UserVarString;
 
     #[test]
     fn parses_caddyfile_domains() {
@@ -138,7 +140,10 @@ mod tests {
         assert_eq!(o.name, "domains");
         assert_eq!(
             o.value,
-            UserVar::List(vec![UserVar::Scalar("example.com".into())])
+            UserVar::List(vec![UserVar::String(UserVarString::json(
+                "example.com".to_string(),
+                "caddyfile.vars.domains".to_string()
+            ))])
         );
     }
 
@@ -148,7 +153,10 @@ mod tests {
             .unwrap();
         assert_eq!(o.scope, OverrideScope::SystemdUnit(2));
         assert_eq!(o.name, "exec_start");
-        let expected = UserVar::Scalar("touch /tmp/i-was-here".into());
+        let expected = UserVar::String(UserVarString::json(
+            "touch /tmp/i-was-here".to_string(),
+            "systemd-unit[2].vars.exec_start".to_string(),
+        ));
         assert_eq!(o.value, expected);
     }
 
@@ -156,7 +164,13 @@ mod tests {
     fn value_may_contain_equals_sign() {
         let o = VarOverride::from_str(r#"systemd-unit[0].vars.exec_start="run --flag=1""#).unwrap();
         assert_eq!(o.name, "exec_start");
-        assert_eq!(o.value, UserVar::Scalar("run --flag=1".into()));
+        assert_eq!(
+            o.value,
+            UserVar::String(UserVarString::json(
+                "run --flag=1".to_string(),
+                "systemd-unit[0].vars.exec_start".to_string()
+            ))
+        );
     }
 
     #[test]

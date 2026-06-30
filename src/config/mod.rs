@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use toml_span::value::ValueInner;
-use toml_span::{DeserError, Deserialize, Spanned};
+use toml_span::{DeserError, Deserialize, Span, Spanned};
 
 mod deserialize;
 mod validate;
@@ -19,7 +19,7 @@ pub fn load(
     app_name: &AppName,
     path: &Path,
     uses_default_config_path: bool,
-) -> Result<AppConfig, Report> {
+) -> Result<(AppConfig, String), Report> {
     let config_toml = fs::read_to_string(path).into_diagnostic().with_context(|| {
         let mut msg = format!("failed to load configuration file at `{}`", path.display());
         if uses_default_config_path {
@@ -29,7 +29,8 @@ pub fn load(
         msg
     })?;
 
-    load_from_str(app_name.as_str(), &config_toml, Some(path))
+    let config = load_from_str(app_name.as_str(), &config_toml, Some(path))?;
+    Ok((config, config_toml))
 }
 
 fn load_from_str(
@@ -253,38 +254,54 @@ impl UserVars {
         Self { vars }
     }
 
+    pub fn strings_mut(&mut self) -> Vec<&mut UserVarString> {
+        let mut strings = Vec::new();
+        for v in self.vars.values_mut() {
+            strings.extend(v.strings_mut());
+        }
+
+        strings
+    }
+
     pub fn set(&mut self, key: String, value: UserVar) {
         // note: only top-level set is supported for now
         self.vars.insert(key, value);
     }
 
-    pub fn to_minijinja(&self) -> minijinja::Value {
+    pub fn into_minijinja(self) -> minijinja::Value {
         self.vars
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.clone().into_minijinja()))
+            .into_iter()
+            .map(|(k, v)| (k, v.into_minijinja()))
             .collect()
     }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum UserVar {
+    String(UserVarString),
     Scalar(minijinja::Value),
     Object(HashMap<String, UserVar>),
     List(Vec<UserVar>),
 }
 
 impl UserVar {
-    pub fn from_json(value: serde_json::Value) -> Self {
+    pub fn from_json(path: &str, value: serde_json::Value) -> Self {
         use serde_json::Value;
         match value {
-            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+            Value::String(s) => UserVar::String(UserVarString::json(s, path.to_string())),
+            Value::Null | Value::Bool(_) | Value::Number(_) => {
                 Self::Scalar(minijinja::Value::from_serialize(value))
             }
-            Value::Array(array) => Self::List(array.into_iter().map(UserVar::from_json).collect()),
+            Value::Array(array) => Self::List(
+                array
+                    .into_iter()
+                    .map(|x| UserVar::from_json(path, x))
+                    .collect(),
+            ),
             Value::Object(object) => Self::Object(
                 object
                     .into_iter()
-                    .map(|(k, v)| (k, UserVar::from_json(v)))
+                    .map(|(k, v)| (k, UserVar::from_json(path, v)))
                     .collect(),
             ),
         }
@@ -292,7 +309,7 @@ impl UserVar {
 
     pub fn from_toml(mut value: toml_span::Value) -> Self {
         match value.take() {
-            ValueInner::String(s) => Self::Scalar(s.into_owned().into()),
+            ValueInner::String(s) => Self::String(UserVarString::toml(s.into_owned(), value.span)),
             ValueInner::Integer(x) => Self::Scalar(x.into()),
             ValueInner::Float(x) => Self::Scalar(x.into()),
             ValueInner::Boolean(x) => Self::Scalar(x.into()),
@@ -310,6 +327,7 @@ impl UserVar {
 
     pub fn into_minijinja(self) -> minijinja::Value {
         match self {
+            UserVar::String(s) => s.value.into(),
             UserVar::Scalar(s) => s,
             UserVar::Object(o) => {
                 let mut obj = HashMap::new();
@@ -324,6 +342,54 @@ impl UserVar {
             }
         }
     }
+
+    fn strings_mut(&mut self) -> Vec<&mut UserVarString> {
+        let mut strings = Vec::new();
+        match self {
+            UserVar::Scalar(_) => {}
+            UserVar::String(s) => strings.push(s),
+            UserVar::Object(o) => {
+                for v in o.values_mut() {
+                    strings.extend(v.strings_mut());
+                }
+            }
+            UserVar::List(l) => {
+                for v in l.iter_mut() {
+                    strings.extend(v.strings_mut());
+                }
+            }
+        }
+
+        strings
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct UserVarString {
+    pub source: UserVarStringSource,
+    pub value: String,
+}
+
+impl UserVarString {
+    pub fn json(value: String, path: String) -> Self {
+        Self {
+            source: UserVarStringSource::Cli { path },
+            value,
+        }
+    }
+
+    pub fn toml(value: String, span: Span) -> Self {
+        Self {
+            source: UserVarStringSource::Toml(span),
+            value,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum UserVarStringSource {
+    Cli { path: String },
+    Toml(Span),
 }
 
 #[cfg(test)]
@@ -488,8 +554,8 @@ vars = {
         assert_eq!(systemd_config.template.value.vars.value.len(), 1);
         assert_eq!(
             systemd_config.template.value.vars.value["exec_start"],
-            UserVar::Scalar(
-                "{{ vade.app_paths.active_artifacts_dir }}/goatcounter serve -listen :{{ vade.app_port }}".into()
+            UserVar::String(
+                UserVarString::toml("{{ vade.app_paths.active_artifacts_dir }}/goatcounter serve -listen :{{ vade.app_port }}".to_string(), Span::new(126, 214))
             )
         );
 
@@ -501,7 +567,10 @@ vars = {
         assert_eq!(caddyfile_config.template.value.vars.value.len(), 1);
         assert_eq!(
             caddyfile_config.template.value.vars.value["domains"],
-            UserVar::List(vec![UserVar::Scalar("goats.example.com".into())])
+            UserVar::List(vec![UserVar::String(UserVarString::toml(
+                "goats.example.com".to_string(),
+                Span::new(289, 306)
+            ))])
         );
     }
 
