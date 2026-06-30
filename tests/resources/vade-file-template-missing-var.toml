@@ -1,0 +1,3 @@
+[[systemd-unit]]
+[systemd-unit.template]
+file = "almost-empty.service"

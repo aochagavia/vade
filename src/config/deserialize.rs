@@ -54,7 +54,8 @@ impl<'de> Deserialize<'de> for TemplateConfig {
                 f.span,
             )),
             (None, None, Some(i)) => {
-                Some(Spanned::with_span(TemplateSource::Inline(i.value), i.span))
+                let span = i.span;
+                Some(Spanned::with_span(TemplateSource::Inline(i), span))
             }
             (None, None, None) => {
                 th.errors.push(Error {

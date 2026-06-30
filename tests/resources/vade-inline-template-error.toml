@@ -1,0 +1,4 @@
+[caddyfile.template]
+inline = """
+Oops... undefined variable {{ vars.kaboom }}
+"""

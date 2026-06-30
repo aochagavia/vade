@@ -4,9 +4,10 @@ use crate::config::{UserVarString, UserVarStringSource};
 use miette::{LabeledSpan, NamedSource, Report, miette};
 use minijinja::{Environment, UndefinedBehavior, context};
 use serde::de::Error;
-use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::path::Path;
+use std::string::ToString;
 
 pub fn base_minijinja_context(
     out_dir_abs: &Path,
@@ -115,16 +116,22 @@ pub fn base_minijinja_context(
 
 pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     let mut env = Environment::new();
+
+    // Undefined variables always result in an error
     env.set_undefined_behavior(UndefinedBehavior::Strict);
 
-    // Debug mode is necessary to get the necessary error information from minijinja into miette
+    // Debug mode is necessary to get diagnostics from minijinja into miette
     env.set_debug(true);
-    env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE)
-        .map_err(|e| minijinja_error_to_report(&e, None))?;
-    env.add_template_owned("shared/header.py.j2", HEADER_TEMPLATE)
-        .map_err(|e| minijinja_error_to_report(&e, None))?;
-    env.add_template_owned("shared/create-tasks.py.j2", CREATE_TASKS_TEMPLATE)
-        .map_err(|e| minijinja_error_to_report(&e, None))?;
+
+    if let Err(e) = env.add_template_owned("deploy-promote.sh.j2", PROMOTE_SCRIPT_TEMPLATE) {
+        unreachable!("{e:?}")
+    }
+    if let Err(e) = env.add_template_owned("shared/header.py.j2", HEADER_TEMPLATE) {
+        unreachable!("{e:?}")
+    }
+    if let Err(e) = env.add_template_owned("shared/create-tasks.py.j2", CREATE_TASKS_TEMPLATE) {
+        unreachable!("{e:?}")
+    }
 
     fn dirname(path: &str) -> Result<String, minijinja::Error> {
         let path = Path::new(path)
@@ -154,94 +161,227 @@ pub fn render_user_var_string(
     toml_config_str: &str,
     user_var_string: &UserVarString,
 ) -> Result<String, Report> {
-    env.add_template_owned("user-var-string", user_var_string.value.to_string())
-        .map_err(|e| minijinja_error_to_report(&e, Some((toml_config_str, user_var_string))))?;
+    let error_to_report = |e: minijinja::Error| -> Report {
+        minijinja_error_to_report(
+            &e,
+            "failed to render user-provided string",
+            Some(toml_config_str),
+            &TemplateSource::from_user_var(user_var_string),
+        )
+    };
+
+    env.add_template_owned("tmp", user_var_string.value.to_string())
+        .map_err(error_to_report)?;
 
     // safety: we just added the template to the environment
-    let template = env.get_template("user-var-string").unwrap();
-    template
-        .render(context)
-        .map_err(|e| minijinja_error_to_report(&e, Some((toml_config_str, user_var_string))))
+    let template = env.get_template("tmp").unwrap();
+    template.render(context).map_err(error_to_report)
 }
 
-pub fn render(
+pub fn render_user_template(
     env: &mut Environment,
     context: &minijinja::Value,
-    template_name: &'static str,
-    template: Cow<'_, str>,
+    toml_config_str: &str,
+    template: &TemplateSource,
+    error_msg: &str,
 ) -> Result<String, Report> {
-    env.add_template_owned(template_name, template.to_string())
-        .map_err(|e| minijinja_error_to_report(&e, None))?;
+    let error_to_report = |e: minijinja::Error| -> Report {
+        minijinja_error_to_report(&e, error_msg, Some(toml_config_str), template)
+    };
+
+    env.add_template_owned("tmp", template.value.clone())
+        .map_err(error_to_report)?;
 
     // safety: we just added the template to the environment
-    let template = env.get_template(template_name).unwrap();
-    template
-        .render(context)
-        .map_err(|e| minijinja_error_to_report(&e, None))
+    let template = env.get_template("tmp").unwrap();
+    template.render(context).map_err(error_to_report)
+}
+
+pub fn render_internal(
+    env: &mut Environment,
+    context: &minijinja::Value,
+    template_id: &str,
+    template: &str,
+) -> Result<String, Report> {
+    let error_to_report = |e: minijinja::Error| -> Report {
+        let template = TemplateSource {
+            value: template.to_string(),
+            meta: TemplateSourceMeta::Builtin {
+                id: template_id.to_string(),
+                kind: BuiltinTemplateKind::Internal,
+            },
+        };
+        minijinja_error_to_report(
+            &e,
+            "failed to render internal template (this is a bug)",
+            None,
+            &template,
+        )
+    };
+
+    env.add_template_owned("tmp", template.to_string())
+        .map_err(error_to_report)?;
+
+    // safety: we just added the template to the environment
+    let template = env.get_template("tmp").unwrap();
+    template.render(context).map_err(error_to_report)
+}
+
+pub struct TemplateSource {
+    value: String,
+    meta: TemplateSourceMeta,
+}
+
+impl TemplateSource {
+    pub fn builtin(id: String, kind: BuiltinTemplateKind, value: String) -> Self {
+        Self {
+            value,
+            meta: TemplateSourceMeta::Builtin { id, kind },
+        }
+    }
+
+    pub fn file(path: String, value: String) -> Self {
+        Self {
+            value,
+            meta: TemplateSourceMeta::File { path },
+        }
+    }
+
+    pub fn inline(span: toml_span::Span, value: String) -> Self {
+        Self {
+            value,
+            meta: TemplateSourceMeta::Inline { span },
+        }
+    }
+
+    fn from_user_var(user_var: &UserVarString) -> TemplateSource {
+        let meta = match &user_var.source {
+            UserVarStringSource::Cli { path } => TemplateSourceMeta::Cli {
+                hint: format!("this template string was assigned to `{path}` through the `--var-json` flag"),
+            },
+            UserVarStringSource::Toml(span) => TemplateSourceMeta::Inline { span: *span },
+        };
+
+        TemplateSource {
+            value: user_var.value.clone(),
+            meta,
+        }
+    }
+}
+
+pub enum TemplateSourceMeta {
+    Builtin {
+        id: String,
+        kind: BuiltinTemplateKind,
+    },
+    File {
+        path: String,
+    },
+    Inline {
+        span: toml_span::Span,
+    },
+    Cli {
+        hint: String,
+    },
+}
+
+#[derive(Copy, Clone)]
+pub enum BuiltinTemplateKind {
+    Caddyfile,
+    SystemdUnit,
+    Internal,
+}
+
+impl BuiltinTemplateKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BuiltinTemplateKind::Caddyfile => "Caddyfile",
+            BuiltinTemplateKind::SystemdUnit => "systemd unit",
+            BuiltinTemplateKind::Internal => "internal",
+        }
+    }
+}
+
+impl Display for BuiltinTemplateKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 fn minijinja_error_to_report(
     error: &minijinja::Error,
-    user_var_info: Option<(&str, &UserVarString)>,
+    root_error: &str,
+    config_toml: Option<&str>,
+    source: &TemplateSource,
 ) -> Report {
     let message = match error.detail() {
         Some(detail) => format!("{}: {detail}", error.kind()),
         None => error.kind().to_string(),
     };
 
-    if let (Some(source), Some(range)) = (error.template_source(), error.range()) {
-        if let Some((config_toml, user_var)) = user_var_info {
-            match &user_var.source {
-                UserVarStringSource::Cli { path } => {
-                    let miette_source = user_var.value.clone();
-                    let label = LabeledSpan::new_primary_with_span(Some(message), range);
-                    let hint = format!(
-                        "this value was assigned to `{path}` through the `--var-json` flag"
-                    );
-                    miette!(
-                        labels = vec![label],
-                        help = hint,
-                        "failed to render user-provided string"
-                    )
-                    .with_source_code(miette_source)
-                }
-                UserVarStringSource::Toml(span) => {
-                    let miette_source = NamedSource::new("vade.toml", config_toml.to_string());
+    // minijinja doesn't guarantee a range will be available for all errors
+    let range = error.range().unwrap_or(0..source.value.len());
 
-                    // The `range` tells us where in the string the error is
-                    // The `span` tells us where in the config toml the string is
-                    let range = span.start + range.start..span.start + range.end;
-                    let label = LabeledSpan::new_primary_with_span(Some(message), range);
-                    miette!(
-                        labels = vec![label],
-                        "failed to render user-provided string"
-                    )
+    match &source.meta {
+        TemplateSourceMeta::Cli { hint } => {
+            let label = LabeledSpan::new_primary_with_span(Some(message), range.clone());
+            let hint = if let Some(extra_hint) = error_hint(error.kind(), &source.value, range) {
+                format!("1. {hint}\n2. {extra_hint}")
+            } else {
+                hint.clone()
+            };
+            miette!(labels = vec![label], help = hint, "{root_error}")
+                .with_source_code(source.value.clone())
+        }
+        TemplateSourceMeta::Inline { span } => {
+            // inline templates come from config toml, so it will always be provided in this match arm
+            let config_toml = config_toml.unwrap();
+            let miette_source = NamedSource::new("vade.toml", config_toml.to_string());
+
+            // The `range` tells us where in the string the error is
+            // The `span` tells us where in the config toml the string is
+            let hint = error_hint(error.kind(), &source.value, range.clone());
+            let range = span.start + range.start..span.start + range.end;
+            let label = LabeledSpan::new_primary_with_span(Some(message), range.clone());
+            if let Some(hint) = hint {
+                miette!(labels = vec![label], help = hint, "{root_error}")
                     .with_source_code(miette_source)
-                }
-            }
-        } else {
-            let name = error.name().unwrap_or("template");
-            let miette_source = NamedSource::new(name, source.to_string());
-            let hint = error_hint(error.kind(), source, range.clone());
-            let label = LabeledSpan::new_primary_with_span(Some(message), range);
-            match hint {
-                Some(hint) => miette!(
-                    labels = vec![label],
-                    help = hint,
-                    "failed to render template"
-                )
-                .with_source_code(miette_source),
-                None => miette!(labels = vec![label], "failed to render template")
-                    .with_source_code(miette_source),
+            } else {
+                miette!(labels = vec![label], "{root_error}").with_source_code(miette_source)
             }
         }
-    } else {
-        let location = match (error.name(), error.line()) {
-            (Some(name), Some(line)) => format!(" (in {name}:{line})"),
-            (Some(name), None) => format!(" (in {name})"),
-            _ => String::new(),
-        };
-        miette!("failed to render template: {message}{location}")
+        TemplateSourceMeta::Builtin { .. } | TemplateSourceMeta::File { .. } => {
+            let (named_source, internal) = match &source.meta {
+                TemplateSourceMeta::Builtin { id, kind } => (
+                    NamedSource::new(
+                        format!("{id} (builtin {} template)", kind.as_str()),
+                        source.value.clone(),
+                    ),
+                    matches!(kind, BuiltinTemplateKind::Internal),
+                ),
+                TemplateSourceMeta::File { path } => {
+                    (NamedSource::new(path.clone(), source.value.clone()), false)
+                }
+                _ => unreachable!(),
+            };
+
+            let hint = if internal {
+                Some(
+                    "this is an internal error in vade, please report it so we can fix it"
+                        .to_string(),
+                )
+            } else {
+                error_hint(error.kind(), &source.value, range.clone())
+            };
+
+            let label = LabeledSpan::new_primary_with_span(Some(message), range);
+            let report = match hint {
+                Some(hint) => miette!(labels = vec![label], help = hint, "{root_error}"),
+                None => miette!(labels = vec![label], "{root_error}"),
+            };
+
+            report.with_source_code(named_source)
+        }
     }
 }
 
@@ -274,7 +414,8 @@ fn missing_user_var_hint(kind: minijinja::ErrorKind, expr: &str) -> Option<Strin
 
     Some(format!(
         "`{key}` is a user-defined variable. Declare it in your `vade.toml` under the relevant \
-         template's `vars`, e.g. `vars = {{ {key} = ... }}`."
+         template's `vars`, e.g. `vars = {{ {key} = ... }}`, or inject it through the CLI using \
+         the `--var-json` option."
     ))
 }
 
@@ -374,7 +515,7 @@ mod tests {
     fn test_render_deploy(app_deployment: &AppDeployment) {
         let context = get_test_minijinja_context(Some(app_deployment));
         let mut env = base_minijinja_env().unwrap();
-        render(&mut env, &context, "", DEPLOY_TEMPLATE.into()).unwrap();
+        render_internal(&mut env, &context, "deploy", DEPLOY_TEMPLATE).unwrap();
     }
 
     #[test]
@@ -389,16 +530,25 @@ mod tests {
 
     #[test]
     fn test_render_deploy_full() {
+        fn template_src(value: &str) -> TemplateSource {
+            TemplateSource {
+                value: value.to_string(),
+                meta: TemplateSourceMeta::File {
+                    path: "".to_string(),
+                },
+            }
+        }
+
         let deployment = AppDeployment {
             artifacts: Some(ResolvedPath::from_str("/my/local/artifacts")),
             caddyfile: Some(TemplateAndUserVars {
-                template: "Believe me, I'm a Caddyfile -.-".to_string(),
+                source: template_src("Believe me, I'm a Caddyfile -.-"),
                 user_vars: Default::default(),
             }),
             systemd_units: vec![SystemdUnit {
                 name: "foo.service".to_string(),
                 template: TemplateAndUserVars {
-                    template: "Believe me, I'm a systemd unit :)".to_string(),
+                    source: template_src("Believe me, I'm a systemd unit :)"),
                     user_vars: Default::default(),
                 },
             }],
@@ -436,13 +586,19 @@ mod tests {
         let mut env = base_minijinja_env().unwrap();
 
         let template = "hello {{ does_not_exist }}";
-        let Err(err) = render(&mut env, &context, "unit_file", template.into()) else {
+        let Err(err) = render_user_template(
+            &mut env,
+            &context,
+            "# dummy toml file",
+            &TemplateSource::file("tmp".to_string(), template.into()),
+            "failed to render template",
+        ) else {
             panic!("expected rendering to fail");
         };
 
         insta::assert_snapshot!(render_report(&err), @"
          × failed to render template
-          ╭─[unit_file:1:10]
+          ╭─[tmp:1:10]
         1 │ hello {{ does_not_exist }}
           ·          ───────┬──────
           ·                 ╰── undefined value
@@ -458,7 +614,13 @@ mod tests {
         // `vars.exec_start` is referenced but never declared in the (empty) `vars` namespace
         let context = context! { vars => UserVars::default().into_minijinja(), ..context };
         let template = "ExecStart={{ vars.exec_start }}";
-        let Err(err) = render(&mut env, &context, "unit_file", template.into()) else {
+        let Err(err) = render_user_template(
+            &mut env,
+            &context,
+            "# dummy toml file",
+            &TemplateSource::file("main.service".to_string(), template.into()),
+            "failed to render template",
+        ) else {
             panic!("expected rendering to fail");
         };
 
@@ -466,14 +628,15 @@ mod tests {
         // user variable in `vade.toml`.
         insta::assert_snapshot!(render_report(&err), @"
          × failed to render template
-          ╭─[unit_file:1:14]
+          ╭─[main.service:1:14]
         1 │ ExecStart={{ vars.exec_start }}
           ·              ───────┬───────
           ·                     ╰── undefined value
           ╰────
          help: `exec_start` is a user-defined variable. Declare it in your
                `vade.toml` under the relevant template's `vars`, e.g. `vars =
-               { exec_start = ... }`.
+               { exec_start = ... }`, or inject it through the CLI using the `--var-
+               json` option.
         ");
     }
 }

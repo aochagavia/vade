@@ -41,13 +41,13 @@ pub fn execute(
             vars => systemd_unit.template.user_vars.into_minijinja(),
             ..context.clone(),
         );
-        let rendered = templating::render(
+        let rendered = templating::render_user_template(
             &mut env,
             &context,
-            "unit_file",
-            systemd_unit.template.template.clone().into(),
-        )
-        .context("failed to render jinja2 template for systemd unit")?;
+            toml_config,
+            &systemd_unit.template.source,
+            "failed to render jinja2 template for systemd unit",
+        )?;
 
         fs::write(out_dir.join(&systemd_unit.name), rendered)
             .into_diagnostic()
@@ -67,9 +67,13 @@ pub fn execute(
             vars => caddyfile.user_vars.into_minijinja(),
             ..context.clone(),
         };
-        let rendered =
-            templating::render(&mut env, &context, "caddyfile", caddyfile.template.into())
-                .context("failed to render jinja2 template for Caddyfile")?;
+        let rendered = templating::render_user_template(
+            &mut env,
+            &context,
+            toml_config,
+            &caddyfile.source,
+            "failed to render jinja2 template for Caddyfile",
+        )?;
 
         fs::write(out_dir.join("Caddyfile"), rendered)
             .into_diagnostic()
@@ -77,9 +81,7 @@ pub fn execute(
     }
 
     // Pyinfra deploy
-    // safety: the template is always valid
-    let deploy =
-        templating::render(&mut env, &context, "deploy.py.j2", DEPLOY_TEMPLATE.into()).unwrap();
+    let deploy = templating::render_internal(&mut env, &context, "deploy", DEPLOY_TEMPLATE)?;
     fs::write(out_dir.join("execute.py"), deploy)
         .into_diagnostic()
         .context("failed to write pyinfra deploy")?;

@@ -18,9 +18,7 @@ pub fn execute(app_name: &AppName, out_dir: &Path) -> Result<(), Report> {
     let mut env = templating::base_minijinja_env()?;
 
     // Write the pyinfra deploy
-    // safety: the template is always valid
-    let deploy =
-        templating::render(&mut env, &context, "create.py.j2", CREATE_TEMPLATE.into()).unwrap();
+    let deploy = templating::render_internal(&mut env, &context, "create", CREATE_TEMPLATE)?;
 
     fs::write(out_dir.join("execute.py"), deploy)
         .into_diagnostic()

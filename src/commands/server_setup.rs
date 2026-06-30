@@ -24,14 +24,8 @@ impl ServerSetup {
         let mut env = templating::base_minijinja_env()?;
 
         // Write the pyinfra deploy
-        // safety: the template is always valid
-        let server_setup = templating::render(
-            &mut env,
-            &context,
-            "server-setup.py.j2",
-            SERVER_SETUP_TEMPLATE.into(),
-        )
-        .unwrap();
+        let server_setup =
+            templating::render_internal(&mut env, &context, "server-setup", SERVER_SETUP_TEMPLATE)?;
 
         fs::write(self.out_dir.join("execute.py"), server_setup)
             .into_diagnostic()

@@ -101,13 +101,127 @@ fn deploy_rejects_out_of_range_unit_override() {
 
     assert!(
         !output.status.success(),
-        "expected deploy to fail for an out-of-range systemd unit override"
+        "expected deploy to fail"
     );
 }
 
 #[test]
+fn deploy_with_invalid_inline_template_raises_error() {
+    let config = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/resources/vade-inline-template-error.toml");
+    let out = fresh_out_dir("invalid-inline-template-deploy");
+    let output = Command::new(VADE_BIN)
+        .args([
+            "deploy",
+            "test-app",
+            "--config",
+            path_arg(&config),
+            "--out-dir",
+            path_arg(&out),
+        ])
+        .output()
+        .expect("failed to run the vade binary");
+
+    assert!(
+        !output.status.success(),
+        "expected deploy to fail"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stdout, @r#"
+    Error:   × failed to render jinja2 template for Caddyfile
+       ╭─[vade.toml:3:31]
+     2 │ inline = """
+     3 │ Oops... undefined variable {{ vars.kaboom }}
+       ·                               ─────┬─────
+       ·                                    ╰── undefined value
+     4 │ """
+       ╰────
+      help: `kaboom` is a user-defined variable. Declare it in your `vade.toml`
+            under the relevant template's `vars`, e.g. `vars = { kaboom = ... }`,
+            or inject it through the CLI using the `--var-json` option.
+    "#);
+}
+
+#[test]
+fn deploy_builtin_with_missing_var_raises_error() {
+    let config = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/resources/vade-builtin-template-missing-var.toml");
+    let out = fresh_out_dir("missing-var-builtin-template-deploy");
+    let output = Command::new(VADE_BIN)
+        .args([
+            "deploy",
+            "test-app",
+            "--config",
+            path_arg(&config),
+            "--out-dir",
+            path_arg(&out),
+        ])
+        .output()
+        .expect("failed to run the vade binary");
+
+    assert!(
+        !output.status.success(),
+        "expected deploy to fail"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stdout, @"
+    Error:   × failed to render jinja2 template for systemd unit
+        ╭─[webapp.service (builtin systemd unit template):12:14]
+     11 │ Type=simple
+     12 │ ExecStart={{ vars.exec_start }}
+        ·              ───────┬───────
+        ·                     ╰── undefined value
+     13 │ WorkingDirectory={{ vade.app.paths.storage }}
+        ╰────
+      help: `exec_start` is a user-defined variable. Declare it in your
+            `vade.toml` under the relevant template's `vars`, e.g. `vars =
+            { exec_start = ... }`, or inject it through the CLI using the `--var-
+            json` option.
+    ");
+}
+
+#[test]
+fn deploy_file_template_with_missing_var_raises_error() {
+    let config = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/resources/vade-file-template-missing-var.toml");
+    let out = fresh_out_dir("missing-var-file-template-deploy");
+    let output = Command::new(VADE_BIN)
+        .args([
+            "deploy",
+            "test-app",
+            "--config",
+            path_arg(&config),
+            "--out-dir",
+            path_arg(&out),
+        ])
+        .output()
+        .expect("failed to run the vade binary");
+
+    assert!(
+        !output.status.success(),
+        "expected deploy to fail"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stdout, @"
+    Error:   × failed to render jinja2 template for systemd unit
+       ╭─[/home/aochagavia/code/vade/tests/resources/almost-empty.service:1:4]
+     1 │ {{ vars.hey }}
+       ·    ────┬───
+       ·        ╰── undefined value
+       ╰────
+      help: `hey` is a user-defined variable. Declare it in your `vade.toml` under
+            the relevant template's `vars`, e.g. `vars = { hey = ... }`, or inject
+            it through the CLI using the `--var-json` option.
+    ");
+}
+
+#[test]
 fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/vade-user-var-error.toml");
+    let config =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/vade-user-var-error.toml");
     let out = fresh_out_dir("invalid-user-string-in-toml-deploy");
     let output = Command::new(VADE_BIN)
         .args([
@@ -123,7 +237,7 @@ fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
 
     assert!(
         !output.status.success(),
-        "expected deploy to fail for an out-of-range systemd unit override"
+        "expected deploy to fail"
     );
 
     let stdout = String::from_utf8_lossy(&output.stderr);
@@ -152,26 +266,29 @@ fn deploy_with_invalid_user_string_in_cli_flag_raises_error() {
             "--out-dir",
             path_arg(&out),
             "--var-json",
-            "systemd-unit[0].vars.exec_start=\"hello {{ world }}\"",
+            "systemd-unit[0].vars.exec_start=\"hello {{ vars.world }}\"",
         ])
         .output()
         .expect("failed to run the vade binary");
 
     assert!(
         !output.status.success(),
-        "expected deploy to fail for an out-of-range systemd unit override"
+        "expected deploy to fail"
     );
 
     let stdout = String::from_utf8_lossy(&output.stderr);
     insta::assert_snapshot!(stdout, @"
     Error:   × failed to render user-provided string
        ╭────
-     1 │ hello {{ world }}
-       ·          ──┬──
-       ·            ╰── undefined value
+     1 │ hello {{ vars.world }}
+       ·          ─────┬────
+       ·               ╰── undefined value
        ╰────
-      help: this value was assigned to `systemd-unit[0].vars.exec_start` through
-            the `--var-json` flag
+      help: 1. this template string was assigned to `systemd-
+            unit[0].vars.exec_start` through the `--var-json` flag
+            2. `world` is a user-defined variable. Declare it in your `vade.toml`
+            under the relevant template's `vars`, e.g. `vars = { world = ... }`,
+            or inject it through the CLI using the `--var-json` option.
     ");
 }
 

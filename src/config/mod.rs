@@ -1,7 +1,9 @@
 use crate::app_name::AppName;
-use crate::read_file;
-use crate::templating::{CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE};
+use crate::templating::{
+    BuiltinTemplateKind, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE,
+};
 use crate::util::RelativePathResolver;
+use crate::{read_file, templating};
 use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr, miette};
 use std::collections::HashMap;
 use std::fs;
@@ -144,7 +146,7 @@ impl SystemdUnitConfig {
         load_template_inner(
             &self.template.value,
             path_resolver,
-            "systemd unit",
+            BuiltinTemplateKind::SystemdUnit,
             Self::get_builtin,
         )
     }
@@ -171,7 +173,7 @@ impl CaddyfileConfig {
         load_template_inner(
             &self.template.value,
             path_resolver,
-            "Caddyfile",
+            BuiltinTemplateKind::Caddyfile,
             Self::get_builtin,
         )
     }
@@ -180,7 +182,7 @@ impl CaddyfileConfig {
 fn load_template_inner(
     template_config: &TemplateConfig,
     path_resolver: &RelativePathResolver,
-    template_kind: &str,
+    template_kind: BuiltinTemplateKind,
     get_builtin: fn(&str) -> Option<&'static str>,
 ) -> Result<TemplateAndUserVars, Report> {
     let template = template_config.load_template(path_resolver, template_kind, get_builtin)?;
@@ -188,7 +190,7 @@ fn load_template_inner(
     let vars = template_config.vars.clone();
 
     Ok(TemplateAndUserVars {
-        template,
+        source: template,
         user_vars: UserVars::from_toml(vars.take()),
     })
 }
@@ -214,33 +216,43 @@ pub struct TemplateConfig {
 pub enum TemplateSource {
     Builtin(String),
     File(PathBuf),
-    Inline(String),
+    Inline(Spanned<String>),
 }
 
 impl TemplateConfig {
     fn load_template(
         &self,
         path_resolver: &RelativePathResolver,
-        kind: &str,
+        kind: BuiltinTemplateKind,
         get_builtin: fn(&str) -> Option<&'static str>,
-    ) -> Result<String, Report> {
+    ) -> Result<templating::TemplateSource, Report> {
         match &self.source.value {
             TemplateSource::Builtin(template_name) => {
                 let builtin = get_builtin(template_name)
                     .ok_or(miette!("unknown built-in {kind} template: {template_name}"))?;
-                Ok(builtin.to_string())
+                Ok(templating::TemplateSource::builtin(
+                    template_name.clone(),
+                    kind,
+                    builtin.to_string(),
+                ))
             }
             TemplateSource::File(path) => {
                 let systemd_unit_path = path_resolver.resolve(path);
-                Ok(read_file(&systemd_unit_path)?)
+                let value = read_file(&systemd_unit_path)?;
+                Ok(templating::TemplateSource::file(
+                    systemd_unit_path.display().to_string(),
+                    value,
+                ))
             }
-            TemplateSource::Inline(s) => Ok(s.clone()),
+            TemplateSource::Inline(s) => {
+                Ok(templating::TemplateSource::inline(s.span, s.value.clone()))
+            }
         }
     }
 }
 
 pub struct TemplateAndUserVars {
-    pub template: String,
+    pub source: templating::TemplateSource,
     pub user_vars: UserVars,
 }
 
