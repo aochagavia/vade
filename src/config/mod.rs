@@ -1,7 +1,5 @@
 use crate::app_name::AppName;
-use crate::templating::{
-    BuiltinTemplateKind, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE,
-};
+use crate::templating::{BuiltinTemplateKind, TomlSource, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE};
 use crate::util::RelativePathResolver;
 use crate::{read_file, templating};
 use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr, miette};
@@ -21,7 +19,7 @@ pub fn load(
     app_name: &AppName,
     path: &Path,
     uses_default_config_path: bool,
-) -> Result<(AppConfig, String), Report> {
+) -> Result<(AppConfig, TomlSource), Report> {
     let config_toml = fs::read_to_string(path).into_diagnostic().with_context(|| {
         let mut msg = format!("failed to load configuration file at `{}`", path.display());
         if uses_default_config_path {
@@ -32,7 +30,12 @@ pub fn load(
     })?;
 
     let config = load_from_str(app_name.as_str(), &config_toml, Some(path))?;
-    Ok((config, config_toml))
+    let config_src = TomlSource {
+        path: path.display().to_string(),
+        value: config_toml,
+    };
+
+    Ok((config, config_src))
 }
 
 fn load_from_str(

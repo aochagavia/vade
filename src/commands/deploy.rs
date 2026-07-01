@@ -1,7 +1,7 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
 use crate::templating;
-use crate::templating::DEPLOY_TEMPLATE;
+use crate::templating::{TomlSource, DEPLOY_TEMPLATE};
 use miette::{IntoDiagnostic, Report, WrapErr};
 use minijinja::context;
 use std::fs;
@@ -11,7 +11,7 @@ pub fn execute(
     app_name: AppName,
     app_deployment: AppDeployment,
     out_dir: PathBuf,
-    toml_config: &str, // necessary for diagnostics
+    toml_config: &TomlSource, // necessary for diagnostics
 ) -> Result<(), Report> {
     fs::create_dir_all(&out_dir)
         .into_diagnostic()

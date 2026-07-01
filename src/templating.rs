@@ -158,14 +158,14 @@ pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
 pub fn render_user_var_string(
     env: &mut Environment,
     context: &minijinja::Value,
-    toml_config_str: &str,
+    toml_config: &TomlSource,
     user_var_string: &UserVarString,
 ) -> Result<String, Report> {
     let error_to_report = |e: minijinja::Error| -> Report {
         minijinja_error_to_report(
             &e,
             "failed to render user-provided string",
-            Some(toml_config_str),
+            Some(toml_config),
             &TemplateSource::from_user_var(user_var_string),
         )
     };
@@ -181,12 +181,12 @@ pub fn render_user_var_string(
 pub fn render_user_template(
     env: &mut Environment,
     context: &minijinja::Value,
-    toml_config_str: &str,
+    toml_config: &TomlSource,
     template: &TemplateSource,
     error_msg: &str,
 ) -> Result<String, Report> {
     let error_to_report = |e: minijinja::Error| -> Report {
-        minijinja_error_to_report(&e, error_msg, Some(toml_config_str), template)
+        minijinja_error_to_report(&e, error_msg, Some(toml_config), template)
     };
 
     env.add_template_owned("tmp", template.value.clone())
@@ -228,7 +228,9 @@ pub fn render_internal(
 }
 
 pub struct TemplateSource {
+    /// The template string
     value: String,
+    /// Metadata about where the template came from (e.g., a file, inline configuration, etc.)
     meta: TemplateSourceMeta,
 }
 
@@ -308,10 +310,16 @@ impl Display for BuiltinTemplateKind {
     }
 }
 
+/// A TOML source file and the filesystem path it was read from
+pub struct TomlSource {
+    pub path: String,
+    pub value: String,
+}
+
 fn minijinja_error_to_report(
     error: &minijinja::Error,
     root_error: &str,
-    config_toml: Option<&str>,
+    config_toml: Option<&TomlSource>,
     source: &TemplateSource,
 ) -> Report {
     let message = match error.detail() {
@@ -336,7 +344,7 @@ fn minijinja_error_to_report(
         TemplateSourceMeta::Inline { span } => {
             // inline templates come from config toml, so it will always be provided in this match arm
             let config_toml = config_toml.unwrap();
-            let miette_source = NamedSource::new("vade.toml", config_toml.to_string());
+            let miette_source = NamedSource::new(config_toml.path.clone(), config_toml.value.clone());
 
             // The `range` tells us where in the string the error is
             // The `span` tells us where in the config toml the string is
@@ -413,7 +421,7 @@ fn missing_user_var_hint(kind: minijinja::ErrorKind, expr: &str) -> Option<Strin
     }
 
     Some(format!(
-        "`{key}` is a user-defined variable. Declare it in your `vade.toml` under the relevant \
+        "`{key}` is a user-defined variable. Declare it in your `vade.toml` file under the relevant \
          template's `vars`, e.g. `vars = {{ {key} = ... }}`, or inject it through the CLI using \
          the `--var-json` option."
     ))
@@ -589,7 +597,10 @@ mod tests {
         let Err(err) = render_user_template(
             &mut env,
             &context,
-            "# dummy toml file",
+            &TomlSource {
+                path: "/path/to/vade.toml".to_string(),
+                value: "# dummy toml file".to_string(),
+            },
             &TemplateSource::file("tmp".to_string(), template.into()),
             "failed to render template",
         ) else {
@@ -617,7 +628,10 @@ mod tests {
         let Err(err) = render_user_template(
             &mut env,
             &context,
-            "# dummy toml file",
+            &TomlSource {
+                path: "/path/to/vade.toml".to_string(),
+                value: "# dummy toml file".to_string(),
+            },
             &TemplateSource::file("main.service".to_string(), template.into()),
             "failed to render template",
         ) else {
@@ -634,7 +648,7 @@ mod tests {
           ·                     ╰── undefined value
           ╰────
          help: `exec_start` is a user-defined variable. Declare it in your
-               `vade.toml` under the relevant template's `vars`, e.g. `vars =
+               `vade.toml` file under the relevant template's `vars`, e.g. `vars =
                { exec_start = ... }`, or inject it through the CLI using the `--var-
                json` option.
         ");

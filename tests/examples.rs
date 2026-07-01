@@ -130,7 +130,7 @@ fn deploy_with_invalid_inline_template_raises_error() {
     let stdout = String::from_utf8_lossy(&output.stderr);
     insta::assert_snapshot!(stdout, @r#"
     Error:   × failed to render jinja2 template for Caddyfile
-       ╭─[vade.toml:3:31]
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-inline-template-error.toml:3:31]
      2 │ inline = """
      3 │ Oops... undefined variable {{ vars.kaboom }}
        ·                               ─────┬─────
@@ -138,8 +138,8 @@ fn deploy_with_invalid_inline_template_raises_error() {
      4 │ """
        ╰────
       help: `kaboom` is a user-defined variable. Declare it in your `vade.toml`
-            under the relevant template's `vars`, e.g. `vars = { kaboom = ... }`,
-            or inject it through the CLI using the `--var-json` option.
+            file under the relevant template's `vars`, e.g. `vars = { kaboom
+            = ... }`, or inject it through the CLI using the `--var-json` option.
     "#);
 }
 
@@ -176,7 +176,7 @@ fn deploy_builtin_with_missing_var_raises_error() {
      13 │ WorkingDirectory={{ vade.app.paths.storage }}
         ╰────
       help: `exec_start` is a user-defined variable. Declare it in your
-            `vade.toml` under the relevant template's `vars`, e.g. `vars =
+            `vade.toml` file under the relevant template's `vars`, e.g. `vars =
             { exec_start = ... }`, or inject it through the CLI using the `--var-
             json` option.
     ");
@@ -212,9 +212,9 @@ fn deploy_file_template_with_missing_var_raises_error() {
        ·    ────┬───
        ·        ╰── undefined value
        ╰────
-      help: `hey` is a user-defined variable. Declare it in your `vade.toml` under
-            the relevant template's `vars`, e.g. `vars = { hey = ... }`, or inject
-            it through the CLI using the `--var-json` option.
+      help: `hey` is a user-defined variable. Declare it in your `vade.toml` file
+            under the relevant template's `vars`, e.g. `vars = { hey = ... }`, or
+            inject it through the CLI using the `--var-json` option.
     ");
 }
 
@@ -243,7 +243,7 @@ fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
     let stdout = String::from_utf8_lossy(&output.stderr);
     insta::assert_snapshot!(stdout, @r#"
     Error:   × failed to render user-provided string
-        ╭─[vade.toml:11:47]
+        ╭─[/home/aochagavia/code/vade/tests/resources/vade-user-var-error.toml:11:47]
      10 │ vars = {
      11 │   exec_start = "{{{ vade.app.artifacts.active }}/goatcounter serve -listen :{{ port('main') }}"
         ·                                               ┬
@@ -287,8 +287,8 @@ fn deploy_with_invalid_user_string_in_cli_flag_raises_error() {
       help: 1. this template string was assigned to `systemd-
             unit[0].vars.exec_start` through the `--var-json` flag
             2. `world` is a user-defined variable. Declare it in your `vade.toml`
-            under the relevant template's `vars`, e.g. `vars = { world = ... }`,
-            or inject it through the CLI using the `--var-json` option.
+            file under the relevant template's `vars`, e.g. `vars = { world
+            = ... }`, or inject it through the CLI using the `--var-json` option.
     ");
 }
 
