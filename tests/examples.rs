@@ -324,11 +324,11 @@ fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to render user-provided string
-        ╭─[tests/resources/vade-user-var-error.toml:11:47]
+        ╭─[tests/resources/vade-user-var-error.toml:11:46]
      10 │ vars = {
-     11 │   exec_start = "{{{ vade.app.artifacts.active }}/goatcounter serve -listen :{{ port('main') }}"
-        ·                                               ┬
-        ·                                               ╰── syntax error: unexpected `}`, expected `:`
+     11 │   exec_start = "{{{ vade.app.paths.artifacts }}/goatcounter serve -listen :{{ port('main') }}"
+        ·                                              ┬
+        ·                                              ╰── syntax error: unexpected `}`, expected `:`
      12 │ }
         ╰────
     "#);

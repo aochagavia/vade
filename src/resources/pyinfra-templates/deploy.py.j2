@@ -1,12 +1,12 @@
 {% include "shared/header.py.j2" %}
 {% include "shared/create-tasks.py.j2" %}
 
-{%- if vade.app.systemd_units %}
+{%- if vade.internal.app.paths.systemd_units %}
 ###
 # Sanity checks
 ###
 
-{%- for unit in vade.app.systemd_units %}
+{%- for unit in vade.internal.app.paths.systemd_units %}
 # This unit must not collide with a pre-existing, unmanaged unit file
 # (an existing unit is considered unmanaged if it has no copy in the app's active deployment)
 if host.get_fact(File, path="{{ unit.installed_path }}") and not host.get_fact(File, path="{{ unit.active_path }}"):
@@ -24,30 +24,30 @@ if host.get_fact(File, path="{{ unit.installed_path }}") and not host.get_fact(F
 
 files.directory(
     name="Delete stale candidate deployment if it exists",
-    path="{{ vade.app.paths.candidate_deployment }}",
+    path="{{ vade.internal.app.paths.deployment_candidate }}",
     present=False,
 )
 
 files.directory(
     name="Create candidate deployment directory",
-    path="{{ vade.app.paths.candidate_deployment }}",
+    path="{{ vade.internal.app.paths.deployment_candidate }}",
     user="{{ vade.app.username }}",
     group="{{ vade.app.username }}",
     mode="755",
 )
 
-{% if vade.app.artifacts.local is defined %}
+{% if vade.internal.app.paths.artifacts_local is defined %}
 files.rsync(
     name="Sync local artifacts to candidate deployment",
-    src="{{ vade.app.artifacts.local }}/",
-    dest="{{ vade.app.artifacts.candidate }}",
-    flags=["-a", "--delete", "--link-dest={{ vade.app.artifacts.active }}"],
+    src="{{ vade.internal.app.paths.artifacts_local }}/",
+    dest="{{ vade.internal.app.paths.artifacts_candidate }}",
+    flags=["-a", "--delete", "--link-dest={{ vade.app.paths.artifacts }}"],
     _sudo=True,
     _sudo_user="{{ vade.app.username }}",
 )
 {% endif %}
 
-{% for unit in vade.app.systemd_units %}
+{% for unit in vade.internal.app.paths.systemd_units %}
 files.put(
     name="Upload systemd unit to candidate deployment",
     src="{{ unit.local_path }}",
@@ -58,11 +58,11 @@ files.put(
 )
 {% endfor %}
 
-{% if vade.app.caddyfile.local is defined %}
+{% if vade.internal.app.paths.caddyfile_local is defined %}
 files.put(
     name="Upload Caddyfile to candidate deployment",
-    src="{{ vade.app.caddyfile.local }}",
-    dest="{{ vade.app.caddyfile.candidate }}",
+    src="{{ vade.internal.app.paths.caddyfile_local }}",
+    dest="{{ vade.internal.app.paths.caddyfile_candidate }}",
     user="{{ vade.app.username }}",
     group="{{ vade.app.username }}",
     mode="644",
@@ -82,13 +82,13 @@ server.shell(
     name="Assign ports and substitute them into the candidate's templated files",
     commands=[
         "python3 {{ vade.internal.assign_ports_script.remote }}"
-        " {{ vade.app.paths.active_deployment }}/assigned-ports"
-        " {{ vade.app.paths.candidate_deployment }}"
+        " {{ vade.internal.app.paths.deployment_active }}/assigned-ports"
+        " {{ vade.internal.app.paths.deployment_candidate }}"
         " {{ vade.app.username }}"
-        {%- if vade.app.caddyfile.candidate is defined %}
-        " {{ vade.app.caddyfile.candidate }}"
+        {%- if vade.internal.app.paths.caddyfile_candidate is defined %}
+        " {{ vade.internal.app.paths.caddyfile_candidate }}"
         {%- endif %}
-        {%- for unit in vade.app.systemd_units %}
+        {%- for unit in vade.internal.app.paths.systemd_units %}
         " {{ unit.candidate_path }}"
         {%- endfor %}
     ],
@@ -96,7 +96,7 @@ server.shell(
 
 files.directory(
     name="Delete previous deployment",
-    path="{{ vade.app.paths.previous_deployment }}",
+    path="{{ vade.internal.app.paths.deployment_previous }}",
     present=False,
 )
 
@@ -112,7 +112,7 @@ set -uo pipefail
 
 bash <<'__VADE_PROMOTE__'
 set -euo pipefail
-{% with src_dir=vade.app.paths.candidate_deployment, downgraded_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}
+{% with src_dir=vade.internal.app.paths.deployment_candidate, downgraded_dir=vade.internal.app.paths.deployment_previous %}{% include "deploy-promote.sh.j2" %}{% endwith %}
 __VADE_PROMOTE__
 promote_status=$?
 
@@ -123,7 +123,7 @@ fi
 echo "Promotion failed (exit $promote_status), rolling back to the previous deployment..." >&2
 bash <<'__VADE_ROLLBACK__'
 set -euo pipefail
-{% with src_dir=vade.app.paths.previous_deployment %}{% include "deploy-promote.sh.j2" %}{% endwith %}
+{% with src_dir=vade.internal.app.paths.deployment_previous %}{% include "deploy-promote.sh.j2" %}{% endwith %}
 __VADE_ROLLBACK__
 rollback_status=$?
 

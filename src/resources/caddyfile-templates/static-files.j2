@@ -1,5 +1,5 @@
 {{ vars.domains | join(", ") }} {
-    root * {{ vade.app.artifacts.active }}
+    root * {{ vade.app.paths.artifacts }}
     encode gzip zstd
     file_server
 }

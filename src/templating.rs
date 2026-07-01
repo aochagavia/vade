@@ -49,30 +49,29 @@ pub fn base_minijinja_context(
             "vade.app.paths.storage",
             format!("{home_dir}/storage").into(),
         ),
-        ("vade.app.paths.active_deployment", active_deployment.into()),
         (
-            "vade.app.paths.previous_deployment",
-            format!("{home_dir}/previous-deployment").into(),
-        ),
-        (
-            "vade.app.paths.candidate_deployment",
-            candidate_deployment.into(),
-        ),
-        (
-            "vade.app.paths.active_systemd_unit_copies",
-            format!("{active_deployment}/systemd-unit-copies").into(),
-        ),
-        (
-            "vade.app.artifacts.active",
+            "vade.app.paths.artifacts",
             format!("{active_deployment}/artifacts").into(),
         ),
         (
-            "vade.app.artifacts.candidate",
-            format!("{candidate_deployment}/artifacts").into(),
+            "vade.internal.app.paths.deployment_active",
+            active_deployment.into(),
         ),
         (
-            "vade.app.caddyfile.active",
-            format!("{active_deployment}/Caddyfile").into(),
+            "vade.internal.app.paths.deployment_previous",
+            format!("{home_dir}/previous-deployment").into(),
+        ),
+        (
+            "vade.internal.app.paths.deployment_candidate",
+            candidate_deployment.into(),
+        ),
+        (
+            "vade.internal.app.paths.active_systemd_unit_copies",
+            format!("{active_deployment}/systemd-unit-copies").into(),
+        ),
+        (
+            "vade.internal.app.paths.artifacts_candidate",
+            format!("{candidate_deployment}/artifacts").into(),
         ),
     ]);
 
@@ -91,11 +90,11 @@ pub fn base_minijinja_context(
         })
     }
 
-    variables.extend([("vade.app.systemd_units", units.into())]);
+    variables.extend([("vade.internal.app.paths.systemd_units", units.into())]);
 
     if let Some(artifacts_dir) = &deployment.artifacts {
         variables.extend([(
-            "vade.app.artifacts.local",
+            "vade.internal.app.paths.artifacts_local",
             artifacts_dir.to_string_lossy().into(),
         )]);
     }
@@ -103,11 +102,11 @@ pub fn base_minijinja_context(
     if deployment.caddyfile.is_some() {
         variables.extend([
             (
-                "vade.app.caddyfile.local",
+                "vade.internal.app.paths.caddyfile_local",
                 out_dir_abs.join("Caddyfile").to_string_lossy().into(),
             ),
             (
-                "vade.app.caddyfile.candidate",
+                "vade.internal.app.paths.caddyfile_candidate",
                 format!("{candidate_deployment}/Caddyfile").into(),
             ),
         ])

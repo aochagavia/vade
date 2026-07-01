@@ -11,5 +11,5 @@ vars = {
 [systemd-unit.template]
 builtin = "webapp.service"
 vars = {
-  exec_start = "{{ vade.app.artifacts.active }}/guestbook"
+  exec_start = "{{ vade.app.paths.artifacts }}/guestbook"
 }

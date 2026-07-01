@@ -4,8 +4,8 @@
 
 # Stop, disable, and delete the currently active deployment's systemd units if present
 # (installed unit paths are derived them from their copies in the active deployment)
-if [ -d "{{ vade.app.paths.active_systemd_unit_copies }}" ]; then
-  for unit_copy in "{{ vade.app.paths.active_systemd_unit_copies }}"/*; do
+if [ -d "{{ vade.internal.app.paths.active_systemd_unit_copies }}" ]; then
+  for unit_copy in "{{ vade.internal.app.paths.active_systemd_unit_copies }}"/*; do
     [ -e "$unit_copy" ] || continue
     unit_name="$(basename "$unit_copy")"
     installed_path="/etc/systemd/system/$unit_name"
@@ -21,11 +21,11 @@ fi
 
 # Downgrade or remove active deployment dir
 {% if downgraded_dir is defined %}
-if [ -d "{{ vade.app.paths.active_deployment }}" ]; then
-  mv "{{ vade.app.paths.active_deployment }}" "{{ downgraded_dir }}"
+if [ -d "{{ vade.internal.app.paths.deployment_active }}" ]; then
+  mv "{{ vade.internal.app.paths.deployment_active }}" "{{ downgraded_dir }}"
 fi
 {% else %}
-rm -rf "{{ vade.app.paths.active_deployment }}"
+rm -rf "{{ vade.internal.app.paths.deployment_active }}"
 {% endif %}
 
 # Let Caddy know that any previously deployed Caddyfile for this app no longer exists
@@ -36,10 +36,10 @@ systemctl reload caddy
 ######
 
 # Promote source dir
-mv -T "{{ src_dir }}" "{{ vade.app.paths.active_deployment }}"
+mv -T "{{ src_dir }}" "{{ vade.internal.app.paths.deployment_active }}"
 
 # Install, enable, and start systemd systemd units
-{%- for unit in vade.app.systemd_units %}
+{%- for unit in vade.internal.app.paths.systemd_units %}
 if [ -f "{{ unit.active_path }}" ]; then
   cp "{{ unit.active_path }}" "{{ unit.installed_path }}"
   chmod 0644 "{{ unit.installed_path }}"
