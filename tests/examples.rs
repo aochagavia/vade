@@ -83,52 +83,37 @@ fn deploy_applies_var_overrides() {
 
 #[test]
 fn deploy_rejects_out_of_range_unit_override() {
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/python-no-deps/vade.toml");
-    let out = fresh_out_dir("override-bad-index-deploy");
-    let output = Command::new(VADE_BIN)
-        .args([
-            "deploy",
-            "test-app",
-            "--config",
-            path_arg(&config),
-            "--out-dir",
-            path_arg(&out),
-            "--set",
-            "systemd-unit[5].exec_start=nope",
-        ])
-        .output()
-        .expect("failed to run the vade binary");
-
-    assert!(
-        !output.status.success(),
-        "expected deploy to fail"
+    let stderr = run_vade_expect_deploy_error(
+        "examples/python-no-deps/vade.toml",
+        &["--var-json", "systemd-unit[5].vars.exec_start=42"],
     );
+
+    insta::assert_snapshot!(stderr, @"Error:   × override targets `systemd-unit[5]`, which doesn't exist")
+}
+
+#[test]
+fn deploy_with_invalid_artifacts_not_found_raises_error() {
+    let stderr = run_vade_expect_deploy_error("tests/resources/vade-artifacts-not-found.toml", &[]);
+
+    insta::assert_snapshot!(stderr, @r#"
+    Error:   × failed to locate artifacts
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-artifacts-not-found.toml:2:9]
+     1 │ [artifacts]
+     2 │ path = "nothing-here"
+       ·         ──────┬─────
+       ·               ╰── the provided path does not exist or is not a directory
+       ╰────
+      help: the artifacts path resolved to `/home/aochagavia/code/vade/tests/
+            resources/nothing-here`
+    "#);
 }
 
 #[test]
 fn deploy_with_invalid_inline_template_raises_error() {
-    let config = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/resources/vade-inline-template-error.toml");
-    let out = fresh_out_dir("invalid-inline-template-deploy");
-    let output = Command::new(VADE_BIN)
-        .args([
-            "deploy",
-            "test-app",
-            "--config",
-            path_arg(&config),
-            "--out-dir",
-            path_arg(&out),
-        ])
-        .output()
-        .expect("failed to run the vade binary");
+    let stderr =
+        run_vade_expect_deploy_error("tests/resources/vade-inline-template-error.toml", &[]);
 
-    assert!(
-        !output.status.success(),
-        "expected deploy to fail"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stderr);
-    insta::assert_snapshot!(stdout, @r#"
+    insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to render jinja2 template for Caddyfile
        ╭─[/home/aochagavia/code/vade/tests/resources/vade-inline-template-error.toml:3:31]
      2 │ inline = """
@@ -145,28 +130,12 @@ fn deploy_with_invalid_inline_template_raises_error() {
 
 #[test]
 fn deploy_builtin_with_missing_var_raises_error() {
-    let config = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/resources/vade-builtin-template-missing-var.toml");
-    let out = fresh_out_dir("missing-var-builtin-template-deploy");
-    let output = Command::new(VADE_BIN)
-        .args([
-            "deploy",
-            "test-app",
-            "--config",
-            path_arg(&config),
-            "--out-dir",
-            path_arg(&out),
-        ])
-        .output()
-        .expect("failed to run the vade binary");
-
-    assert!(
-        !output.status.success(),
-        "expected deploy to fail"
+    let stderr = run_vade_expect_deploy_error(
+        "tests/resources/vade-builtin-template-missing-var.toml",
+        &[],
     );
 
-    let stdout = String::from_utf8_lossy(&output.stderr);
-    insta::assert_snapshot!(stdout, @"
+    insta::assert_snapshot!(stderr, @"
     Error:   × failed to render jinja2 template for systemd unit
         ╭─[webapp.service (builtin systemd unit template):12:14]
      11 │ Type=simple
@@ -184,28 +153,10 @@ fn deploy_builtin_with_missing_var_raises_error() {
 
 #[test]
 fn deploy_file_template_with_missing_var_raises_error() {
-    let config = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/resources/vade-file-template-missing-var.toml");
-    let out = fresh_out_dir("missing-var-file-template-deploy");
-    let output = Command::new(VADE_BIN)
-        .args([
-            "deploy",
-            "test-app",
-            "--config",
-            path_arg(&config),
-            "--out-dir",
-            path_arg(&out),
-        ])
-        .output()
-        .expect("failed to run the vade binary");
+    let stderr =
+        run_vade_expect_deploy_error("tests/resources/vade-file-template-missing-var.toml", &[]);
 
-    assert!(
-        !output.status.success(),
-        "expected deploy to fail"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stderr);
-    insta::assert_snapshot!(stdout, @"
+    insta::assert_snapshot!(stderr, @"
     Error:   × failed to render jinja2 template for systemd unit
        ╭─[/home/aochagavia/code/vade/tests/resources/almost-empty.service:1:4]
      1 │ {{ vars.hey }}
@@ -220,28 +171,9 @@ fn deploy_file_template_with_missing_var_raises_error() {
 
 #[test]
 fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
-    let config =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/vade-user-var-error.toml");
-    let out = fresh_out_dir("invalid-user-string-in-toml-deploy");
-    let output = Command::new(VADE_BIN)
-        .args([
-            "deploy",
-            "test-app",
-            "--config",
-            path_arg(&config),
-            "--out-dir",
-            path_arg(&out),
-        ])
-        .output()
-        .expect("failed to run the vade binary");
+    let stderr = run_vade_expect_deploy_error("tests/resources/vade-user-var-error.toml", &[]);
 
-    assert!(
-        !output.status.success(),
-        "expected deploy to fail"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stderr);
-    insta::assert_snapshot!(stdout, @r#"
+    insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to render user-provided string
         ╭─[/home/aochagavia/code/vade/tests/resources/vade-user-var-error.toml:11:47]
      10 │ vars = {
@@ -255,29 +187,15 @@ fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
 
 #[test]
 fn deploy_with_invalid_user_string_in_cli_flag_raises_error() {
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/goatcounter/vade.toml");
-    let out = fresh_out_dir("invalid-user-string-in-cli-deploy");
-    let output = Command::new(VADE_BIN)
-        .args([
-            "deploy",
-            "test-app",
-            "--config",
-            path_arg(&config),
-            "--out-dir",
-            path_arg(&out),
+    let stderr = run_vade_expect_deploy_error(
+        "examples/goatcounter/vade.toml",
+        &[
             "--var-json",
             "systemd-unit[0].vars.exec_start=\"hello {{ vars.world }}\"",
-        ])
-        .output()
-        .expect("failed to run the vade binary");
-
-    assert!(
-        !output.status.success(),
-        "expected deploy to fail"
+        ],
     );
 
-    let stdout = String::from_utf8_lossy(&output.stderr);
-    insta::assert_snapshot!(stdout, @"
+    insta::assert_snapshot!(stderr, @"
     Error:   × failed to render user-provided string
        ╭────
      1 │ hello {{ vars.world }}
@@ -333,6 +251,29 @@ fn run_vade(args: &[&str]) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+}
+
+fn run_vade_expect_deploy_error(vade_toml: &str, extra_args: &[&str]) -> String {
+    let out = fresh_out_dir("expect-deploy-error");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join(vade_toml);
+    let mut args = vec![
+        "deploy",
+        "test-app",
+        "--config",
+        path_arg(&config),
+        "--out-dir",
+        path_arg(&out),
+    ];
+    args.extend(extra_args);
+
+    let output = Command::new(VADE_BIN)
+        .args(&args)
+        .output()
+        .expect("failed to run the vade binary");
+
+    assert!(!output.status.success(), "expected deploy to fail");
+
+    String::from_utf8(output.stderr).unwrap()
 }
 
 fn assert_execute_py_created(out_dir: &Path, config: Option<&Path>, command: &str) {

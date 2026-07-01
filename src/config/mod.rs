@@ -1,10 +1,14 @@
 use crate::app_name::AppName;
-use crate::templating::{BuiltinTemplateKind, TomlSource, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE};
+use crate::templating::{
+    BuiltinTemplateKind, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE,
+    TomlSource,
+};
 use crate::util::RelativePathResolver;
 use crate::{read_file, templating};
 use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr, miette};
 use std::collections::HashMap;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use toml_span::value::ValueInner;
@@ -88,12 +92,12 @@ pub struct ArtifactsConfig {
     /// The relative path to the directory where the to-be-deployed artifacts are located
     ///
     /// Note: if the path is relative, it will be resolved relative to the configuration file, not to the current working directory
-    path: Spanned<PathBuf>,
+    pub path: Spanned<PathBuf>,
 }
 
 impl ArtifactsConfig {
-    pub fn path(&self) -> &Path {
-        &self.path.value
+    pub fn span(&self) -> Range<usize> {
+        self.path.span.start..self.path.span.end
     }
 }
 
@@ -554,7 +558,7 @@ vars = {
 
         let config = test_load_from_str(src).unwrap();
         assert_eq!(
-            config.artifacts().unwrap().path().to_string_lossy(),
+            config.artifacts().unwrap().path.value.to_string_lossy(),
             "artifacts"
         );
         assert_eq!(config.systemd_units().len(), 1);

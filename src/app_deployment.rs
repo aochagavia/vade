@@ -2,8 +2,9 @@ use crate::app_name::AppName;
 use crate::cli::{OverrideScope, VarOverride};
 use crate::config::AppConfig;
 use crate::config::TemplateAndUserVars;
+use crate::templating::TomlSource;
 use crate::util::{RelativePathResolver, ResolvedPath};
-use miette::{Report, miette};
+use miette::{LabeledSpan, Report, miette};
 
 pub struct AppDeployment {
     pub artifacts: Option<ResolvedPath>,
@@ -20,21 +21,31 @@ impl AppDeployment {
     pub fn from_config(
         app_name: &AppName,
         config: AppConfig,
+        config_source: &TomlSource,
         overrides: &[VarOverride],
         path_resolver: &RelativePathResolver,
     ) -> Result<Self, Report> {
         let artifacts_dir = config
             .artifacts()
-            .map(|artifacts| path_resolver.resolve(artifacts.path()));
+            .map(|artifacts| (artifacts, path_resolver.resolve(&artifacts.path.value)));
 
         // Sanity check artifacts dir
-        if let Some(artifacts_dir) = &artifacts_dir
+        if let Some((raw_artifacts, artifacts_dir)) = &artifacts_dir
             && !artifacts_dir.is_dir()
         {
+            let label = LabeledSpan::new_primary_with_span(
+                Some("the provided path does not exist or is not a directory".to_string()),
+                raw_artifacts.span(),
+            );
             return Err(miette!(
-                "the provided artifacts directory does not exist or is not a directory (check the path at `{}`)",
-                artifacts_dir.display()
-            ));
+                labels = vec![label],
+                help = format!(
+                    "the artifacts path resolved to `{}`",
+                    artifacts_dir.display()
+                ),
+                "failed to locate artifacts"
+            )
+            .with_source_code(config_source.to_named_source()));
         }
 
         // Load Caddyfile
@@ -57,7 +68,7 @@ impl AppDeployment {
         apply_overrides(overrides, caddyfile.as_mut(), &mut systemd_units)?;
 
         Ok(AppDeployment {
-            artifacts: artifacts_dir,
+            artifacts: artifacts_dir.map(|(_, a)| a),
             caddyfile,
             systemd_units,
         })

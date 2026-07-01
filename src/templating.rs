@@ -259,7 +259,9 @@ impl TemplateSource {
     fn from_user_var(user_var: &UserVarString) -> TemplateSource {
         let meta = match &user_var.source {
             UserVarStringSource::Cli { path } => TemplateSourceMeta::Cli {
-                hint: format!("this template string was assigned to `{path}` through the `--var-json` flag"),
+                hint: format!(
+                    "this template string was assigned to `{path}` through the `--var-json` flag"
+                ),
             },
             UserVarStringSource::Toml(span) => TemplateSourceMeta::Inline { span: *span },
         };
@@ -316,6 +318,12 @@ pub struct TomlSource {
     pub value: String,
 }
 
+impl TomlSource {
+    pub fn to_named_source(&self) -> NamedSource<String> {
+        NamedSource::new(self.path.clone(), self.value.clone())
+    }
+}
+
 fn minijinja_error_to_report(
     error: &minijinja::Error,
     root_error: &str,
@@ -344,7 +352,7 @@ fn minijinja_error_to_report(
         TemplateSourceMeta::Inline { span } => {
             // inline templates come from config toml, so it will always be provided in this match arm
             let config_toml = config_toml.unwrap();
-            let miette_source = NamedSource::new(config_toml.path.clone(), config_toml.value.clone());
+            let miette_source = config_toml.to_named_source();
 
             // The `range` tells us where in the string the error is
             // The `span` tells us where in the config toml the string is
