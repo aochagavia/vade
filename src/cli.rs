@@ -63,10 +63,10 @@ pub struct DeployCommand {
     pub out_dir: PathBuf,
     /// Override a template variable with a JSON value
     ///
-    /// Example 1: `--var-json 'caddyfile.vars.domains=["example.com", "www.example.com"]'`
+    /// Example 1: `--set 'caddyfile.vars.domains=["example.com", "www.example.com"]'`
     ///
-    /// Example 2: `--var-json 'systemd-unit[0].vars.exec_start="touch /tmp/i-was-here"'`
-    #[arg(long = "var-json", value_name = "PATH=JSON")]
+    /// Example 2: `--set 'systemd-unit[0].vars.exec_start="touch /tmp/i-was-here"'`
+    #[arg(long = "set", value_name = "PATH=JSON")]
     pub set_json: Vec<VarOverride>,
 }
 

@@ -58,9 +58,9 @@ fn deploy_applies_var_overrides() {
         path_arg(&config),
         "--out-dir",
         path_arg(&out),
-        "--var-json",
+        "--set",
         r#"caddyfile.vars.domains=["override.example.com"]"#,
-        "--var-json",
+        "--set",
         "systemd-unit[0].vars.exec_start=\"python3 /custom/main.py\"",
     ]);
 
@@ -86,29 +86,23 @@ fn deploy_rejects_var_for_missing_config() {
     // Caddyfile
     let stderr = run_vade_expect_deploy_error(
         "tests/resources/vade-empty.toml",
-        &[
-            "--var-json",
-            "caddyfile.vars.foo=42",
-        ],
+        &["--set", "caddyfile.vars.foo=42"],
     );
 
     insta::assert_snapshot!(stderr, @"
-    Error:   × --var-json targets `caddyfile`, but the configuration does not have a
+    Error:   × --set targets `caddyfile`, but the configuration does not have a
       │ `[caddyfile]` section
     ");
 
     // Systemd unit
     let stderr = run_vade_expect_deploy_error(
         "tests/resources/vade-empty.toml",
-        &[
-            "--var-json",
-            "systemd-unit[0].vars.foo=42",
-        ],
+        &["--set", "systemd-unit[0].vars.foo=42"],
     );
 
     insta::assert_snapshot!(stderr, @"
-    Error:   × --var-json targets `systemd-unit[0]`, but the configuration does not have
-      │ a systemd unit at that index (the total number of systemd units is 0)
+    Error:   × --set targets `systemd-unit[0]`, but the configuration does not have a
+      │ systemd unit at that index (the total number of systemd units is 0)
     ")
 }
 
@@ -117,23 +111,21 @@ fn deploy_rejects_malformed_overrides() {
     // Invalid format (not path=value)
     let stderr = run_vade_expect_deploy_error(
         "examples/python-no-deps/vade.toml",
-        &["--var-json", "no-equals-sign-to-be-seen"],
+        &["--set", "no-equals-sign-to-be-seen"],
     );
 
     insta::assert_snapshot!(stderr, @"
-    error: invalid value 'no-equals-sign-to-be-seen' for '--var-json <PATH=JSON>': expected the format `<path>=<value>`
+    error: invalid value 'no-equals-sign-to-be-seen' for '--set <PATH=JSON>': expected the format `<path>=<value>`
 
     For more information, try '--help'.
     ");
 
     // Invalid path
-    let stderr = run_vade_expect_deploy_error(
-        "examples/python-no-deps/vade.toml",
-        &["--var-json", "foo=42"],
-    );
+    let stderr =
+        run_vade_expect_deploy_error("examples/python-no-deps/vade.toml", &["--set", "foo=42"]);
 
     insta::assert_snapshot!(stderr, @"
-    error: invalid value 'foo=42' for '--var-json <PATH=JSON>': failed to parse path `foo`: it must start with `caddyfile.vars.` or `systemd-unit[<index>].vars.`
+    error: invalid value 'foo=42' for '--set <PATH=JSON>': failed to parse path `foo`: it must start with `caddyfile.vars.` or `systemd-unit[<index>].vars.`
 
     For more information, try '--help'.
     ");
@@ -142,13 +134,13 @@ fn deploy_rejects_malformed_overrides() {
     let stderr = run_vade_expect_deploy_error(
         "examples/python-no-deps/vade.toml",
         &[
-            "--var-json",
+            "--set",
             "systemd-unit[0].vars.exec_start=this_string_is_missing_quotes",
         ],
     );
 
     insta::assert_snapshot!(stderr, @"
-    error: invalid value 'systemd-unit[0].vars.exec_start=this_string_is_missing_quotes' for '--var-json <PATH=JSON>': failed to parse JSON in `this_string_is_missing_quotes`, expected ident at line 1 column 2
+    error: invalid value 'systemd-unit[0].vars.exec_start=this_string_is_missing_quotes' for '--set <PATH=JSON>': failed to parse JSON in `this_string_is_missing_quotes`, expected ident at line 1 column 2
 
     For more information, try '--help'.
     ")
@@ -202,7 +194,7 @@ fn deploy_with_invalid_inline_template_raises_error() {
        ╰────
       help: `kaboom` is a user-defined variable. Declare it in your `vade.toml`
             file under the relevant template's `vars`, e.g. `vars = { kaboom
-            = ... }`, or inject it through the CLI using the `--var-json` option.
+            = ... }`, or inject it through the CLI using the `--set` option.
     "#);
 }
 
@@ -224,8 +216,8 @@ fn deploy_builtin_with_missing_var_raises_error() {
         ╰────
       help: `exec_start` is a user-defined variable. Declare it in your
             `vade.toml` file under the relevant template's `vars`, e.g. `vars =
-            { exec_start = ... }`, or inject it through the CLI using the `--var-
-            json` option.
+            { exec_start = ... }`, or inject it through the CLI using the `--set`
+            option.
     ");
 }
 
@@ -277,7 +269,7 @@ fn deploy_file_template_with_missing_var_raises_error() {
        ╰────
       help: `hey` is a user-defined variable. Declare it in your `vade.toml` file
             under the relevant template's `vars`, e.g. `vars = { hey = ... }`, or
-            inject it through the CLI using the `--var-json` option.
+            inject it through the CLI using the `--set` option.
     ");
 }
 
@@ -302,7 +294,7 @@ fn deploy_with_invalid_user_string_in_cli_flag_raises_error() {
     let stderr = run_vade_expect_deploy_error(
         "examples/goatcounter/vade.toml",
         &[
-            "--var-json",
+            "--set",
             "systemd-unit[0].vars.exec_start=\"hello {{ vars.world }}\"",
         ],
     );
@@ -315,10 +307,10 @@ fn deploy_with_invalid_user_string_in_cli_flag_raises_error() {
        ·               ╰── undefined value
        ╰────
       help: 1. this template string was assigned to `systemd-
-            unit[0].vars.exec_start` through the `--var-json` flag
+            unit[0].vars.exec_start` through the `--set` flag
             2. `world` is a user-defined variable. Declare it in your `vade.toml`
             file under the relevant template's `vars`, e.g. `vars = { world
-            = ... }`, or inject it through the CLI using the `--var-json` option.
+            = ... }`, or inject it through the CLI using the `--set` option.
     ");
 }
 

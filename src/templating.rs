@@ -261,7 +261,7 @@ impl TemplateSource {
         let meta = match &user_var.source {
             UserVarStringSource::Cli { path } => TemplateSourceMeta::Cli {
                 hint: format!(
-                    "this template string was assigned to `{path}` through the `--var-json` flag"
+                    "this template string was assigned to `{path}` through the `--set` flag"
                 ),
             },
             UserVarStringSource::Toml(span) => TemplateSourceMeta::Inline { span: *span },
@@ -435,7 +435,7 @@ fn missing_user_var_hint(kind: minijinja::ErrorKind, expr: &str) -> Option<Strin
     Some(format!(
         "`{key}` is a user-defined variable. Declare it in your `vade.toml` file under the relevant \
          template's `vars`, e.g. `vars = {{ {key} = ... }}`, or inject it through the CLI using \
-         the `--var-json` option."
+         the `--set` option."
     ))
 }
 
@@ -661,8 +661,8 @@ mod tests {
           ╰────
          help: `exec_start` is a user-defined variable. Declare it in your
                `vade.toml` file under the relevant template's `vars`, e.g. `vars =
-               { exec_start = ... }`, or inject it through the CLI using the `--var-
-               json` option.
+               { exec_start = ... }`, or inject it through the CLI using the `--set`
+               option.
         ");
     }
 }

@@ -84,7 +84,7 @@ fn apply_overrides(
                     .as_deref_mut()
                     .ok_or_else(|| {
                         miette!(
-                            "--var-json targets `caddyfile`, but the configuration does not have a `[caddyfile]` section"
+                            "--set targets `caddyfile`, but the configuration does not have a `[caddyfile]` section"
                         )
                     })?
                     .user_vars
@@ -95,7 +95,7 @@ fn apply_overrides(
                     .get_mut(index)
                     .ok_or_else(|| {
                         miette!(
-                            "--var-json targets `systemd-unit[{index}]`, but the configuration does not have a systemd unit at that index (the total number of systemd units is {})", systemd_units_len)
+                            "--set targets `systemd-unit[{index}]`, but the configuration does not have a systemd unit at that index (the total number of systemd units is {})", systemd_units_len)
                     })?
                     .template
                     .user_vars
