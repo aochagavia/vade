@@ -2,4 +2,7 @@
 [systemd-unit.template]
 inline = """
 Trust me, I'm a systemd unit
+
+[Install]
+WantedBy=multi-user.target
 """

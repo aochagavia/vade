@@ -38,15 +38,17 @@ systemctl reload caddy
 # Promote source dir
 mv -T "{{ src_dir }}" "{{ vade.internal.app.paths.deployment_active }}"
 
-# Install, enable, and start systemd systemd units
+# Install, enable, and start systemd units
 {%- for unit in vade.internal.app.paths.systemd_units %}
-if [ -f "{{ unit.active_path }}" ]; then
-  cp "{{ unit.active_path }}" "{{ unit.installed_path }}"
-  chmod 0644 "{{ unit.installed_path }}"
-  chown root:root "{{ unit.installed_path }}"
-  systemctl daemon-reload
-  systemctl enable --now "{{ unit.name }}"
-fi
+  if [ -f "{{ unit.active_path }}" ]; then
+    cp "{{ unit.active_path }}" "{{ unit.installed_path }}"
+    chmod 0644 "{{ unit.installed_path }}"
+    chown root:root "{{ unit.installed_path }}"
+    systemctl daemon-reload
+    if [[ $(systemctl is-enabled "{{ unit.name }}") != "static" ]]; then
+      systemctl enable --now "{{ unit.name }}"
+    fi
+  fi
 {%- endfor %}
 
 # Let Caddy know a new Caddyfile might exist
