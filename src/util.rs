@@ -1,5 +1,7 @@
+use miette::{LabeledSpan, NamedSource, Report, miette};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use toml_span::Span;
 
 pub struct RelativePathResolver {
     root: PathBuf,
@@ -40,4 +42,13 @@ impl Deref for ResolvedPath {
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
+}
+
+pub fn labeled_span(message: String, span: Span) -> LabeledSpan {
+    LabeledSpan::new_with_span(Some(message), span.start..span.end)
+}
+
+pub fn diagnostic(error: &str, details: String, span: Span, source: NamedSource<String>) -> Report {
+    let labels = vec![labeled_span(details, span)];
+    miette!(labels = labels, "{error}").with_source_code(source)
 }

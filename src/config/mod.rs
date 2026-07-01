@@ -3,9 +3,9 @@ use crate::templating::{
     BuiltinTemplateKind, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE,
     TomlSource,
 };
-use crate::util::RelativePathResolver;
+use crate::util::{RelativePathResolver, diagnostic};
 use crate::{read_file, templating};
-use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr, miette};
+use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr};
 use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
@@ -148,9 +148,11 @@ impl SystemdUnitConfig {
 
     pub fn load_template(
         &self,
+        toml_source: &TomlSource,
         path_resolver: &RelativePathResolver,
     ) -> Result<TemplateAndUserVars, Report> {
         load_template_inner(
+            toml_source,
             &self.template.value,
             path_resolver,
             BuiltinTemplateKind::SystemdUnit,
@@ -175,9 +177,11 @@ impl CaddyfileConfig {
 
     pub fn load_template(
         &self,
+        toml_source: &TomlSource,
         path_resolver: &RelativePathResolver,
     ) -> Result<TemplateAndUserVars, Report> {
         load_template_inner(
+            toml_source,
             &self.template.value,
             path_resolver,
             BuiltinTemplateKind::Caddyfile,
@@ -187,12 +191,14 @@ impl CaddyfileConfig {
 }
 
 fn load_template_inner(
+    toml_source: &TomlSource,
     template_config: &TemplateConfig,
     path_resolver: &RelativePathResolver,
     template_kind: BuiltinTemplateKind,
     get_builtin: fn(&str) -> Option<&'static str>,
 ) -> Result<TemplateAndUserVars, Report> {
-    let template = template_config.load_template(path_resolver, template_kind, get_builtin)?;
+    let template =
+        template_config.load_template(toml_source, path_resolver, template_kind, get_builtin)?;
 
     let vars = template_config.vars.clone();
 
@@ -229,14 +235,21 @@ pub enum TemplateSource {
 impl TemplateConfig {
     fn load_template(
         &self,
+        toml_source: &TomlSource,
         path_resolver: &RelativePathResolver,
         kind: BuiltinTemplateKind,
         get_builtin: fn(&str) -> Option<&'static str>,
     ) -> Result<templating::TemplateSource, Report> {
         match &self.source.value {
             TemplateSource::Builtin(template_name) => {
-                let builtin = get_builtin(template_name)
-                    .ok_or(miette!("unknown built-in {kind} template: {template_name}"))?;
+                let builtin = get_builtin(template_name).ok_or_else(|| {
+                    diagnostic(
+                        "unknown builtin template",
+                        format!("there is no {kind} template with this name"),
+                        self.source.span,
+                        toml_source.to_named_source(),
+                    )
+                })?;
                 Ok(templating::TemplateSource::builtin(
                     template_name.clone(),
                     kind,

@@ -51,13 +51,13 @@ impl AppDeployment {
         // Load Caddyfile
         let mut caddyfile = config
             .caddyfile()
-            .map(|c| c.load_template(path_resolver))
+            .map(|c| c.load_template(config_source, path_resolver))
             .transpose()?;
 
         // Load systemd units
         let mut systemd_units = Vec::new();
         for c in config.systemd_units() {
-            let template = c.load_template(path_resolver)?;
+            let template = c.load_template(config_source, path_resolver)?;
             systemd_units.push(SystemdUnit {
                 name: c.filename(app_name.as_str()),
                 template,

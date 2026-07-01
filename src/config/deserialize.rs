@@ -2,6 +2,7 @@ use crate::config::{
     AppConfig, ArtifactsConfig, CaddyfileConfig, SystemdUnitConfig, TemplateConfig, TemplateSource,
     UserVar,
 };
+use crate::util::labeled_span;
 use miette::{LabeledSpan, Report, SourceCode, miette};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -140,25 +141,14 @@ fn error_labels(e: &Error) -> Vec<LabeledSpan> {
         // For unknown keys, point at each offending key rather than at the enclosing table
         ErrorKind::UnexpectedKeys { keys, .. } => keys
             .iter()
-            .map(|(name, span)| {
-                LabeledSpan::new_primary_with_span(
-                    Some(format!("unexpected key `{name}`")),
-                    span.start..span.end,
-                )
-            })
+            .map(|(name, span)| labeled_span(format!("unexpected key `{name}`"), *span))
             .collect(),
         // For duplicate keys, point also at the conflicting definition
         ErrorKind::DuplicateKey { first, .. } | ErrorKind::DuplicateTable { first, .. } => vec![
-            LabeledSpan::new_primary_with_span(Some(e.to_string()), e.span.start..e.span.end),
-            LabeledSpan::new_with_span(
-                Some("first defined here".to_string()),
-                first.start..first.end,
-            ),
+            labeled_span(e.to_string(), e.span),
+            labeled_span("first defined here".to_string(), *first),
         ],
-        _ => vec![LabeledSpan::new_primary_with_span(
-            Some(e.to_string()),
-            e.span.start..e.span.end,
-        )],
+        _ => vec![labeled_span(e.to_string(), e.span)],
     }
 }
 

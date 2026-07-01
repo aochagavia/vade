@@ -152,6 +152,22 @@ fn deploy_builtin_with_missing_var_raises_error() {
 }
 
 #[test]
+fn deploy_builtin_with_non_existing_name_raises_error() {
+    let stderr =
+        run_vade_expect_deploy_error("tests/resources/vade-builtin-template-typo.toml", &[]);
+
+    insta::assert_snapshot!(stderr, @r#"
+    Error:   × unknown builtin template
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-builtin-template-typo.toml:4:12]
+     3 │ # Note the missing `e` at the end
+     4 │ builtin = "webapp.servic"
+       ·            ──────┬──────
+       ·                  ╰── there is no systemd unit template with this name
+       ╰────
+    "#);
+}
+
+#[test]
 fn deploy_file_template_with_missing_var_raises_error() {
     let stderr =
         run_vade_expect_deploy_error("tests/resources/vade-file-template-missing-var.toml", &[]);
