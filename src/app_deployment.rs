@@ -3,8 +3,8 @@ use crate::cli::{OverrideScope, VarOverride};
 use crate::config::AppConfig;
 use crate::config::TemplateAndUserVars;
 use crate::templating::TomlSource;
-use crate::util::{RelativePathResolver, ResolvedPath};
-use miette::{LabeledSpan, Report, miette};
+use crate::util::{RelativePathResolver, ResolvedPath, diagnostic_with_help};
+use miette::{Report, miette};
 
 pub struct AppDeployment {
     pub artifacts: Option<ResolvedPath>,
@@ -33,19 +33,16 @@ impl AppDeployment {
         if let Some((raw_artifacts, artifacts_dir)) = &artifacts_dir
             && !artifacts_dir.is_dir()
         {
-            let label = LabeledSpan::new_primary_with_span(
-                Some("the provided path does not exist or is not a directory".to_string()),
-                raw_artifacts.span(),
-            );
-            return Err(miette!(
-                labels = vec![label],
-                help = format!(
+            return Err(diagnostic_with_help(
+                "failed to locate artifacts",
+                "the provided path does not exist or is not a directory".to_string(),
+                format!(
                     "the artifacts path resolved to `{}`",
                     artifacts_dir.display()
                 ),
-                "failed to locate artifacts"
-            )
-            .with_source_code(config_source.to_named_source()));
+                raw_artifacts.span().into(),
+                config_source.to_named_source(),
+            ));
         }
 
         // Load Caddyfile
@@ -87,17 +84,18 @@ fn apply_overrides(
                     .as_deref_mut()
                     .ok_or_else(|| {
                         miette!(
-                            "override targets `caddyfile`, but the configuration has no `[caddyfile]` section"
+                            "--var-json targets `caddyfile`, but the configuration does not have a `[caddyfile]` section"
                         )
                     })?
                     .user_vars
             }
             OverrideScope::SystemdUnit(index) => {
+                let systemd_units_len = systemd_units.len();
                 &mut systemd_units
                     .get_mut(index)
                     .ok_or_else(|| {
                         miette!(
-                            "override targets `systemd-unit[{index}]`, which doesn't exist")
+                            "--var-json targets `systemd-unit[{index}]`, but the configuration does not have a systemd unit at that index (the total number of systemd units is {})", systemd_units_len)
                     })?
                     .template
                     .user_vars

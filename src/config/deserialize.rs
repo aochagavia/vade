@@ -133,7 +133,7 @@ pub fn toml_error_to_report<S: SourceCode + 'static>(err: DeserError, source: S)
         labels.extend(error_labels(e));
     }
 
-    miette!(labels = labels, "Failed to parse vade config file").with_source_code(source)
+    miette!(labels = labels, "failed to parse vade config file").with_source_code(source)
 }
 
 fn error_labels(e: &Error) -> Vec<LabeledSpan> {

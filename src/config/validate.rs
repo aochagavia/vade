@@ -33,7 +33,7 @@ impl ValidationErrors {
             .into_iter()
             .map(|e| LabeledSpan::new_primary_with_span(Some(e.message), e.span.start..e.span.end))
             .collect::<Vec<_>>();
-        miette!(labels = labels, "Invalid vade config file").with_source_code(source)
+        miette!(labels = labels, "invalid vade config file").with_source_code(source)
     }
 }
 

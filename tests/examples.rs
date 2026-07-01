@@ -82,13 +82,91 @@ fn deploy_applies_var_overrides() {
 }
 
 #[test]
-fn deploy_rejects_out_of_range_unit_override() {
+fn deploy_rejects_var_for_missing_config() {
+    // Caddyfile
     let stderr = run_vade_expect_deploy_error(
-        "examples/python-no-deps/vade.toml",
-        &["--var-json", "systemd-unit[5].vars.exec_start=42"],
+        "tests/resources/vade-empty.toml",
+        &[
+            "--var-json",
+            "caddyfile.vars.foo=42",
+        ],
     );
 
-    insta::assert_snapshot!(stderr, @"Error:   × override targets `systemd-unit[5]`, which doesn't exist")
+    insta::assert_snapshot!(stderr, @"
+    Error:   × --var-json targets `caddyfile`, but the configuration does not have a
+      │ `[caddyfile]` section
+    ");
+
+    // Systemd unit
+    let stderr = run_vade_expect_deploy_error(
+        "tests/resources/vade-empty.toml",
+        &[
+            "--var-json",
+            "systemd-unit[0].vars.foo=42",
+        ],
+    );
+
+    insta::assert_snapshot!(stderr, @"
+    Error:   × --var-json targets `systemd-unit[0]`, but the configuration does not have
+      │ a systemd unit at that index (the total number of systemd units is 0)
+    ")
+}
+
+#[test]
+fn deploy_rejects_malformed_overrides() {
+    // Invalid format (not path=value)
+    let stderr = run_vade_expect_deploy_error(
+        "examples/python-no-deps/vade.toml",
+        &["--var-json", "no-equals-sign-to-be-seen"],
+    );
+
+    insta::assert_snapshot!(stderr, @"
+    error: invalid value 'no-equals-sign-to-be-seen' for '--var-json <PATH=JSON>': expected the format `<path>=<value>`
+
+    For more information, try '--help'.
+    ");
+
+    // Invalid path
+    let stderr = run_vade_expect_deploy_error(
+        "examples/python-no-deps/vade.toml",
+        &["--var-json", "foo=42"],
+    );
+
+    insta::assert_snapshot!(stderr, @"
+    error: invalid value 'foo=42' for '--var-json <PATH=JSON>': failed to parse path `foo`: it must start with `caddyfile.vars.` or `systemd-unit[<index>].vars.`
+
+    For more information, try '--help'.
+    ");
+
+    // Valid path, invalid value
+    let stderr = run_vade_expect_deploy_error(
+        "examples/python-no-deps/vade.toml",
+        &[
+            "--var-json",
+            "systemd-unit[0].vars.exec_start=this_string_is_missing_quotes",
+        ],
+    );
+
+    insta::assert_snapshot!(stderr, @"
+    error: invalid value 'systemd-unit[0].vars.exec_start=this_string_is_missing_quotes' for '--var-json <PATH=JSON>': failed to parse JSON in `this_string_is_missing_quotes`, expected ident at line 1 column 2
+
+    For more information, try '--help'.
+    ")
+}
+
+#[test]
+fn deploy_with_bad_toml_raises_error() {
+    let stderr = run_vade_expect_deploy_error("tests/resources/vade-bad-toml.toml", &[]);
+
+    insta::assert_snapshot!(stderr, @r#"
+    Error:   × failed to parse vade config file
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-bad-toml.toml:1:16]
+     1 │ ╭─▶ [[systemd-unit]
+     2 │ ├─▶ [systemd-unit.template]
+       · ╰──── expected a right bracket, found a newline
+     3 │     builtin = "webapp.service"
+       ╰────
+    "#);
 }
 
 #[test]

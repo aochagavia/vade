@@ -1,7 +1,7 @@
 use crate::app_name::AppName;
 use crate::config::UserVar;
 use clap::{Parser, Subcommand};
-use miette::{IntoDiagnostic, Report, WrapErr, bail, miette};
+use miette::{Report, bail, miette};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -87,15 +87,14 @@ impl FromStr for VarOverride {
     type Err = Report;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (path, raw_value) = s.split_once('=').ok_or_else(|| {
-            miette!("invalid override `{s}`: expected the format `<path>=<value>`")
-        })?;
+        let (path, raw_value) = s
+            .split_once('=')
+            .ok_or_else(|| miette!("expected the format `<path>=<value>`"))?;
 
         let (scope, name) = parse_path(path)?;
 
         let json: serde_json::Value = serde_json::from_str(raw_value)
-            .into_diagnostic()
-            .with_context(|| format!("invalid JSON value in override `{s}`"))?;
+            .map_err(|e| miette!("failed to parse JSON in `{raw_value}`, {e}"))?;
         let value = UserVar::from_json(path, json);
 
         Ok(VarOverride { scope, name, value })
@@ -103,29 +102,30 @@ impl FromStr for VarOverride {
 }
 
 fn parse_path(path: &str) -> Result<(OverrideScope, String), Report> {
+    let error = miette!(
+        "failed to parse path `{path}`: it must start with `caddyfile.vars.` or `systemd-unit[<index>].vars.`"
+    );
     if let Some(name) = path.strip_prefix("caddyfile.vars.") {
         if name.is_empty() {
-            bail!("invalid override path `{path}`: missing variable name after `caddyfile.`");
+            bail!(error);
         }
         return Ok((OverrideScope::Caddyfile, name.to_owned()));
     }
 
     if let Some(rest) = path.strip_prefix("systemd-unit[") {
-        let (index, var_name) = rest.split_once("].vars.").ok_or_else(|| {
-            miette!("invalid override path `{path}`: expected `systemd-unit[<index>].vars.<var>`")
-        })?;
-        let index: usize = index.parse().map_err(|_| {
-            miette!("invalid override path `{path}`: `{index}` is not a valid systemd unit index")
+        let Some((index, var_name)) = rest.split_once("].vars.") else {
+            bail!(error)
+        };
+        let index: usize = index.parse().map_err(|e| {
+            miette!("failed to parse path `{path}`: `{index}` is not a valid index ({e})")
         })?;
         if var_name.is_empty() {
-            bail!("invalid override path `{path}`: expected `systemd-unit[<index>].<var>`")
+            bail!(error)
         };
         return Ok((OverrideScope::SystemdUnit(index), var_name.to_string()));
     }
 
-    bail!(
-        "invalid override path `{path}`: must start with `caddyfile.vars.` or `systemd-unit[<index>].vars.`"
-    )
+    bail!(error)
 }
 
 #[cfg(test)]

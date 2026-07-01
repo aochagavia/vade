@@ -1,7 +1,8 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
 use crate::config::{UserVarString, UserVarStringSource};
-use miette::{LabeledSpan, NamedSource, Report, miette};
+use crate::util::{diagnostic, diagnostic_with_help};
+use miette::{NamedSource, Report};
 use minijinja::{Environment, UndefinedBehavior, context};
 use serde::de::Error;
 use std::collections::BTreeMap;
@@ -340,14 +341,19 @@ fn minijinja_error_to_report(
 
     match &source.meta {
         TemplateSourceMeta::Cli { hint } => {
-            let label = LabeledSpan::new_primary_with_span(Some(message), range.clone());
-            let hint = if let Some(extra_hint) = error_hint(error.kind(), &source.value, range) {
-                format!("1. {hint}\n2. {extra_hint}")
-            } else {
-                hint.clone()
-            };
-            miette!(labels = vec![label], help = hint, "{root_error}")
-                .with_source_code(source.value.clone())
+            let hint =
+                if let Some(extra_hint) = error_hint(error.kind(), &source.value, range.clone()) {
+                    format!("1. {hint}\n2. {extra_hint}")
+                } else {
+                    hint.clone()
+                };
+            diagnostic_with_help(
+                root_error,
+                message,
+                hint,
+                range.into(),
+                source.value.clone(),
+            )
         }
         TemplateSourceMeta::Inline { span } => {
             // inline templates come from config toml, so it will always be provided in this match arm
@@ -358,12 +364,11 @@ fn minijinja_error_to_report(
             // The `span` tells us where in the config toml the string is
             let hint = error_hint(error.kind(), &source.value, range.clone());
             let range = span.start + range.start..span.start + range.end;
-            let label = LabeledSpan::new_primary_with_span(Some(message), range.clone());
-            if let Some(hint) = hint {
-                miette!(labels = vec![label], help = hint, "{root_error}")
-                    .with_source_code(miette_source)
-            } else {
-                miette!(labels = vec![label], "{root_error}").with_source_code(miette_source)
+            match hint {
+                Some(hint) => {
+                    diagnostic_with_help(root_error, message, hint, range.into(), miette_source)
+                }
+                None => diagnostic(root_error, message, range.into(), miette_source),
             }
         }
         TemplateSourceMeta::Builtin { .. } | TemplateSourceMeta::File { .. } => {
@@ -390,13 +395,12 @@ fn minijinja_error_to_report(
                 error_hint(error.kind(), &source.value, range.clone())
             };
 
-            let label = LabeledSpan::new_primary_with_span(Some(message), range);
-            let report = match hint {
-                Some(hint) => miette!(labels = vec![label], help = hint, "{root_error}"),
-                None => miette!(labels = vec![label], "{root_error}"),
-            };
-
-            report.with_source_code(named_source)
+            match hint {
+                Some(hint) => {
+                    diagnostic_with_help(root_error, message, hint, range.into(), named_source)
+                }
+                None => diagnostic(root_error, message, range.into(), named_source),
+            }
         }
     }
 }
