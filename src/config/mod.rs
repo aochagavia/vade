@@ -1,10 +1,10 @@
 use crate::app_name::AppName;
+use crate::templating;
 use crate::templating::{
     BuiltinTemplateKind, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE,
     TomlSource,
 };
-use crate::util::{RelativePathResolver, diagnostic};
-use crate::{read_file, templating};
+use crate::util::{RelativePathResolver, diagnostic, diagnostic_with_help};
 use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr};
 use std::collections::HashMap;
 use std::fs;
@@ -258,7 +258,15 @@ impl TemplateConfig {
             }
             TemplateSource::File(path) => {
                 let systemd_unit_path = path_resolver.resolve(path);
-                let value = read_file(&systemd_unit_path)?;
+                let value = fs::read_to_string(&*systemd_unit_path).map_err(|e| {
+                    diagnostic_with_help(
+                        "failed to load template",
+                        format!("reading the file resulted in an error: {e}"),
+                        format!("the path resolved to `{}`", systemd_unit_path.display()),
+                        self.source.span,
+                        toml_source.to_named_source(),
+                    )
+                })?;
                 Ok(templating::TemplateSource::file(
                     systemd_unit_path.display().to_string(),
                     value,

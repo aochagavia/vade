@@ -154,16 +154,34 @@ fn deploy_builtin_with_missing_var_raises_error() {
 #[test]
 fn deploy_builtin_with_non_existing_name_raises_error() {
     let stderr =
-        run_vade_expect_deploy_error("tests/resources/vade-builtin-template-typo.toml", &[]);
+        run_vade_expect_deploy_error("tests/resources/vade-builtin-template-not-found.toml", &[]);
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × unknown builtin template
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-builtin-template-typo.toml:4:12]
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-builtin-template-not-found.toml:4:12]
      3 │ # Note the missing `e` at the end
      4 │ builtin = "webapp.servic"
        ·            ──────┬──────
        ·                  ╰── there is no systemd unit template with this name
        ╰────
+    "#);
+}
+
+#[test]
+fn deploy_file_with_non_existing_template_raises_error() {
+    let stderr =
+        run_vade_expect_deploy_error("tests/resources/vade-file-template-not-found.toml", &[]);
+
+    insta::assert_snapshot!(stderr, @r#"
+    Error:   × failed to load template
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-file-template-not-found.toml:3:9]
+     2 │ [systemd-unit.template]
+     3 │ file = "not-found.service"
+       ·         ────────┬────────
+       ·                 ╰── reading the file resulted in an error: No such file or directory (os error 2)
+       ╰────
+      help: the path resolved to `/home/aochagavia/code/vade/tests/resources/not-
+            found.service`
     "#);
 }
 

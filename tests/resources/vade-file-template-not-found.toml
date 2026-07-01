@@ -1,0 +1,3 @@
+[[systemd-unit]]
+[systemd-unit.template]
+file = "not-found.service"

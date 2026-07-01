@@ -52,3 +52,14 @@ pub fn diagnostic(error: &str, details: String, span: Span, source: NamedSource<
     let labels = vec![labeled_span(details, span)];
     miette!(labels = labels, "{error}").with_source_code(source)
 }
+
+pub fn diagnostic_with_help(
+    error: &str,
+    details: String,
+    help: String,
+    span: Span,
+    source: NamedSource<String>,
+) -> Report {
+    let labels = vec![labeled_span(details, span)];
+    miette!(labels = labels, help = help, "{error}").with_source_code(source)
+}
