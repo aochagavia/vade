@@ -2,7 +2,8 @@ use crate::app_name::AppName;
 use crate::cli::{OverrideScope, VarOverride};
 use crate::config::AppConfig;
 use crate::config::TemplateAndUserVars;
-use crate::templating::TomlSource;
+use crate::config::TomlSource;
+use crate::templating::BuiltinTemplateKind;
 use crate::util::{RelativePathResolver, ResolvedPath, diagnostic_with_help};
 use miette::{Report, miette};
 
@@ -48,13 +49,23 @@ impl AppDeployment {
         // Load Caddyfile
         let mut caddyfile = config
             .caddyfile()
-            .map(|c| c.load_template(config_source, path_resolver))
+            .map(|c| {
+                c.template().load_template_source(
+                    config_source,
+                    path_resolver,
+                    BuiltinTemplateKind::Caddyfile,
+                )
+            })
             .transpose()?;
 
         // Load systemd units
         let mut systemd_units = Vec::new();
         for c in config.systemd_units() {
-            let template = c.load_template(config_source, path_resolver)?;
+            let template = c.template().load_template_source(
+                config_source,
+                path_resolver,
+                BuiltinTemplateKind::SystemdUnit,
+            )?;
             systemd_units.push(SystemdUnit {
                 name: c.filename(app_name.as_str()),
                 template,

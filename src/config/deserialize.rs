@@ -1,5 +1,5 @@
 use crate::config::{
-    AppConfig, ArtifactsConfig, CaddyfileConfig, SystemdUnitConfig, TemplateConfig, TemplateSource,
+    AppConfig, ArtifactsConfig, CaddyfileConfig, SystemdUnitConfig, TemplateConfig, TemplateOrigin,
     UserVar,
 };
 use crate::util::labeled_span;
@@ -46,17 +46,17 @@ impl<'de> Deserialize<'de> for TemplateConfig {
         let builtin = th.optional_s::<String>("builtin");
         let file = th.optional_s::<String>("file");
         let inline = th.optional_s::<String>("inline");
-        let source = match (builtin, file, inline) {
+        let origin = match (builtin, file, inline) {
             (Some(b), None, None) => {
-                Some(Spanned::with_span(TemplateSource::Builtin(b.value), b.span))
+                Some(Spanned::with_span(TemplateOrigin::Builtin(b.value), b.span))
             }
             (None, Some(f), None) => Some(Spanned::with_span(
-                TemplateSource::File(PathBuf::from(f.value)),
+                TemplateOrigin::File(PathBuf::from(f.value)),
                 f.span,
             )),
             (None, None, Some(i)) => {
                 let span = i.span;
-                Some(Spanned::with_span(TemplateSource::Inline(i), span))
+                Some(Spanned::with_span(TemplateOrigin::Inline(i), span))
             }
             (None, None, None) => {
                 th.errors.push(Error {
@@ -92,7 +92,7 @@ impl<'de> Deserialize<'de> for TemplateConfig {
         th.finalize(None)?;
 
         Ok(TemplateConfig {
-            source: source.expect("source is set when there are no errors"),
+            origin: origin.unwrap(), // always set when there are no errors
             vars,
         })
     }

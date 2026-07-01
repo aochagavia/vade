@@ -1,6 +1,6 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
-use crate::config::{UserVarString, UserVarStringSource};
+use crate::config::{TomlSource, UserVarString, UserVarStringOrigin};
 use crate::util::{diagnostic, diagnostic_with_help};
 use miette::{NamedSource, Report};
 use minijinja::{Environment, UndefinedBehavior, context};
@@ -10,6 +10,7 @@ use std::fmt::Display;
 use std::path::Path;
 use std::string::ToString;
 
+/// Returns the variables that a template will have access to when rendering
 pub fn base_minijinja_context(
     out_dir_abs: &Path,
     app_name: Option<&AppName>,
@@ -115,6 +116,10 @@ pub fn base_minijinja_context(
     build_minijinja_value(variables)
 }
 
+/// Returns the environment that a template will have access to when rendering
+///
+/// An environment holds the rendering configuration, along with registered sub-templates,
+/// filters and functions that a template has access to when rendering
 pub fn base_minijinja_env() -> Result<Environment<'static>, Report> {
     let mut env = Environment::new();
 
@@ -258,13 +263,13 @@ impl TemplateSource {
     }
 
     fn from_user_var(user_var: &UserVarString) -> TemplateSource {
-        let meta = match &user_var.source {
-            UserVarStringSource::Cli { path } => TemplateSourceMeta::Cli {
+        let meta = match &user_var.origin {
+            UserVarStringOrigin::Cli { path } => TemplateSourceMeta::Cli {
                 hint: format!(
                     "this template string was assigned to `{path}` through the `--set` flag"
                 ),
             },
-            UserVarStringSource::Toml(span) => TemplateSourceMeta::Inline { span: *span },
+            UserVarStringOrigin::Toml(span) => TemplateSourceMeta::Inline { span: *span },
         };
 
         TemplateSource {
@@ -305,23 +310,26 @@ impl BuiltinTemplateKind {
             BuiltinTemplateKind::Internal => "internal",
         }
     }
+
+    pub fn get_builtin_source(&self, name: &str) -> Option<&'static str> {
+        match self {
+            BuiltinTemplateKind::Caddyfile => match name {
+                "static-files" => Some(CADDYFILE_STATIC_FILES),
+                "reverse-proxy" => Some(CADDYFILE_REVERSE_PROXY),
+                _ => None,
+            },
+            BuiltinTemplateKind::SystemdUnit => match name {
+                "webapp.service" => Some(SYSTEMD_WEBAPP_SERVICE),
+                _ => None,
+            },
+            BuiltinTemplateKind::Internal => None,
+        }
+    }
 }
 
 impl Display for BuiltinTemplateKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
-    }
-}
-
-/// A TOML source file and the filesystem path it was read from
-pub struct TomlSource {
-    pub path: String,
-    pub value: String,
-}
-
-impl TomlSource {
-    pub fn to_named_source(&self) -> NamedSource<String> {
-        NamedSource::new(self.path.clone(), self.value.clone())
     }
 }
 

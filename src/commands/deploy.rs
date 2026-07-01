@@ -1,7 +1,8 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
+use crate::config::TomlSource;
 use crate::templating;
-use crate::templating::{DEPLOY_TEMPLATE, TomlSource};
+use crate::templating::DEPLOY_TEMPLATE;
 use miette::{IntoDiagnostic, Report, WrapErr};
 use minijinja::context;
 use std::fs;

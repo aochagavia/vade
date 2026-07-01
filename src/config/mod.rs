@@ -1,9 +1,5 @@
 use crate::app_name::AppName;
-use crate::templating;
-use crate::templating::{
-    BuiltinTemplateKind, CADDYFILE_REVERSE_PROXY, CADDYFILE_STATIC_FILES, SYSTEMD_WEBAPP_SERVICE,
-    TomlSource,
-};
+use crate::templating::{BuiltinTemplateKind, TemplateSource};
 use crate::util::{RelativePathResolver, diagnostic, diagnostic_with_help};
 use miette::{IntoDiagnostic, NamedSource, Report, SourceCode, WrapErr};
 use std::collections::HashMap;
@@ -123,6 +119,10 @@ pub struct SystemdUnitConfig {
 }
 
 impl SystemdUnitConfig {
+    pub fn template(&self) -> &TemplateConfig {
+        &self.template.value
+    }
+
     pub fn filename(&self, app_name: &str) -> String {
         let suffix = self
             .filename_suffix
@@ -138,27 +138,6 @@ impl SystemdUnitConfig {
 
         format!("{app_name}{suffix}.{extension}")
     }
-
-    fn get_builtin(template_name: &str) -> Option<&'static str> {
-        match template_name {
-            "webapp.service" => Some(SYSTEMD_WEBAPP_SERVICE),
-            _ => None,
-        }
-    }
-
-    pub fn load_template(
-        &self,
-        toml_source: &TomlSource,
-        path_resolver: &RelativePathResolver,
-    ) -> Result<TemplateAndUserVars, Report> {
-        load_template_inner(
-            toml_source,
-            &self.template.value,
-            path_resolver,
-            BuiltinTemplateKind::SystemdUnit,
-            Self::get_builtin,
-        )
-    }
 }
 
 pub struct CaddyfileConfig {
@@ -167,57 +146,21 @@ pub struct CaddyfileConfig {
 }
 
 impl CaddyfileConfig {
-    fn get_builtin(template_name: &str) -> Option<&'static str> {
-        match template_name {
-            "static-files" => Some(CADDYFILE_STATIC_FILES),
-            "reverse-proxy" => Some(CADDYFILE_REVERSE_PROXY),
-            _ => None,
-        }
+    pub fn template(&self) -> &TemplateConfig {
+        &self.template.value
     }
-
-    pub fn load_template(
-        &self,
-        toml_source: &TomlSource,
-        path_resolver: &RelativePathResolver,
-    ) -> Result<TemplateAndUserVars, Report> {
-        load_template_inner(
-            toml_source,
-            &self.template.value,
-            path_resolver,
-            BuiltinTemplateKind::Caddyfile,
-            Self::get_builtin,
-        )
-    }
-}
-
-fn load_template_inner(
-    toml_source: &TomlSource,
-    template_config: &TemplateConfig,
-    path_resolver: &RelativePathResolver,
-    template_kind: BuiltinTemplateKind,
-    get_builtin: fn(&str) -> Option<&'static str>,
-) -> Result<TemplateAndUserVars, Report> {
-    let template =
-        template_config.load_template(toml_source, path_resolver, template_kind, get_builtin)?;
-
-    let vars = template_config.vars.clone();
-
-    Ok(TemplateAndUserVars {
-        source: template,
-        user_vars: UserVars::from_toml(vars.take()),
-    })
 }
 
 pub struct TemplateConfig {
-    /// The source from which the template will be loaded
+    /// The origin from which the template will be loaded
     ///
-    /// The following source types are supported:
-    /// - `builtin`: loads one of the built-in templates (those under `src/resources/systemd-unit-templates`)
+    /// The following origins are supported:
+    /// - `builtin`: loads one of the built-in templates (those under `src/resources/systemd-unit-templates` or `src/resources/caddyfile-templates`)
     /// - `inline`: loads the template from the provided string
     /// - `file`: loads the template from the filesystem. If the path is relative, it will be resolved relative to the configuration file, not to the current working directory
     ///
     /// Templates are rendered using `minijinja`
-    source: Spanned<TemplateSource>,
+    origin: Spanned<TemplateOrigin>,
     /// Variables to use when rendering the template
     ///
     /// These variables are placed under the `vars` object, so e.g., a variable called `domains`
@@ -226,61 +169,60 @@ pub struct TemplateConfig {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum TemplateSource {
+pub enum TemplateOrigin {
     Builtin(String),
     File(PathBuf),
     Inline(Spanned<String>),
 }
 
 impl TemplateConfig {
-    fn load_template(
+    pub fn load_template_source(
         &self,
         toml_source: &TomlSource,
         path_resolver: &RelativePathResolver,
         kind: BuiltinTemplateKind,
-        get_builtin: fn(&str) -> Option<&'static str>,
-    ) -> Result<templating::TemplateSource, Report> {
-        match &self.source.value {
-            TemplateSource::Builtin(template_name) => {
-                let builtin = get_builtin(template_name).ok_or_else(|| {
+    ) -> Result<TemplateAndUserVars, Report> {
+        let source = match &self.origin.value {
+            TemplateOrigin::Builtin(template_name) => {
+                let builtin = kind.get_builtin_source(template_name).ok_or_else(|| {
                     diagnostic(
                         "unknown builtin template",
                         format!("there is no {kind} template with this name"),
-                        self.source.span,
+                        self.origin.span,
                         toml_source.to_named_source(),
                     )
                 })?;
-                Ok(templating::TemplateSource::builtin(
-                    template_name.clone(),
-                    kind,
-                    builtin.to_string(),
-                ))
+
+                TemplateSource::builtin(template_name.clone(), kind, builtin.to_string())
             }
-            TemplateSource::File(path) => {
+            TemplateOrigin::File(path) => {
                 let systemd_unit_path = path_resolver.resolve(path);
                 let value = fs::read_to_string(&*systemd_unit_path).map_err(|e| {
                     diagnostic_with_help(
                         "failed to load template",
                         format!("reading the file resulted in an error: {e}"),
                         format!("the path resolved to `{}`", systemd_unit_path.display()),
-                        self.source.span,
+                        self.origin.span,
                         toml_source.to_named_source(),
                     )
                 })?;
-                Ok(templating::TemplateSource::file(
-                    systemd_unit_path.display().to_string(),
-                    value,
-                ))
+
+                TemplateSource::file(systemd_unit_path.display().to_string(), value)
             }
-            TemplateSource::Inline(s) => {
-                Ok(templating::TemplateSource::inline(s.span, s.value.clone()))
-            }
-        }
+            TemplateOrigin::Inline(s) => TemplateSource::inline(s.span, s.value.clone()),
+        };
+
+        let vars = self.vars.clone();
+
+        Ok(TemplateAndUserVars {
+            source,
+            user_vars: UserVars::from_toml(vars.take()),
+        })
     }
 }
 
 pub struct TemplateAndUserVars {
-    pub source: templating::TemplateSource,
+    pub source: TemplateSource,
     pub user_vars: UserVars,
 }
 
@@ -406,30 +348,42 @@ impl UserVar {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct UserVarString {
-    pub source: UserVarStringSource,
+    pub origin: UserVarStringOrigin,
     pub value: String,
 }
 
 impl UserVarString {
     pub fn json(value: String, path: String) -> Self {
         Self {
-            source: UserVarStringSource::Cli { path },
+            origin: UserVarStringOrigin::Cli { path },
             value,
         }
     }
 
     pub fn toml(value: String, span: Span) -> Self {
         Self {
-            source: UserVarStringSource::Toml(span),
+            origin: UserVarStringOrigin::Toml(span),
             value,
         }
     }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum UserVarStringSource {
+pub enum UserVarStringOrigin {
     Cli { path: String },
     Toml(Span),
+}
+
+/// A TOML source file and the filesystem path it was read from
+pub struct TomlSource {
+    pub path: String,
+    pub value: String,
+}
+
+impl TomlSource {
+    pub fn to_named_source(&self) -> NamedSource<String> {
+        NamedSource::new(self.path.clone(), self.value.clone())
+    }
 }
 
 #[cfg(test)]
@@ -499,8 +453,8 @@ vars = {
         let systemd_config = config.systemd_units().next().unwrap();
         assert_eq!(systemd_config.filename("my-app"), "my-app.service");
         assert_eq!(
-            systemd_config.template.value.source.value,
-            TemplateSource::Builtin("webapp.service".to_string())
+            systemd_config.template.value.origin.value,
+            TemplateOrigin::Builtin("webapp.service".to_string())
         );
         assert_eq!(systemd_config.template.value.vars.value.len(), 1);
         assert_eq!(
@@ -512,8 +466,8 @@ vars = {
 
         let caddyfile_config = config.caddyfile().unwrap();
         assert_eq!(
-            caddyfile_config.template.value.source.value,
-            TemplateSource::Builtin("reverse-proxy".to_string())
+            caddyfile_config.template.value.origin.value,
+            TemplateOrigin::Builtin("reverse-proxy".to_string())
         );
         assert_eq!(caddyfile_config.template.value.vars.value.len(), 1);
         assert_eq!(
@@ -562,16 +516,16 @@ WantedBy=timers.target
         let systemd_config = config.systemd_units().next().unwrap();
         assert_eq!(systemd_config.filename("my-app"), "my-app.service");
         assert_matches!(
-            systemd_config.template.value.source.value,
-            TemplateSource::Inline(_)
+            systemd_config.template.value.origin.value,
+            TemplateOrigin::Inline(_)
         );
         assert_eq!(systemd_config.template.value.vars.value.len(), 0);
 
         let systemd_config = config.systemd_units().nth(1).unwrap();
         assert_eq!(systemd_config.filename("my-app"), "my-app.timer");
         assert_matches!(
-            systemd_config.template.value.source.value,
-            TemplateSource::Inline(_)
+            systemd_config.template.value.origin.value,
+            TemplateOrigin::Inline(_)
         );
         assert_eq!(systemd_config.template.value.vars.value.len(), 0);
     }
