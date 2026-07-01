@@ -212,7 +212,7 @@ fn deploy_with_invalid_artifacts_not_found_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to locate artifacts
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-artifacts-not-found.toml:2:9]
+       ╭─[tests/resources/vade-artifacts-not-found.toml:2:9]
      1 │ [artifacts]
      2 │ path = "nothing-here"
        ·         ──────┬─────
@@ -230,7 +230,7 @@ fn deploy_with_invalid_inline_template_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to render jinja2 template for Caddyfile
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-inline-template-error.toml:3:31]
+       ╭─[tests/resources/vade-inline-template-error.toml:3:31]
      2 │ inline = """
      3 │ Oops... undefined variable {{ vars.kaboom }}
        ·                               ─────┬─────
@@ -273,7 +273,7 @@ fn deploy_builtin_with_non_existing_name_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × unknown builtin template
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-builtin-template-not-found.toml:4:12]
+       ╭─[tests/resources/vade-builtin-template-not-found.toml:4:12]
      3 │ # Note the missing `e` at the end
      4 │ builtin = "webapp.servic"
        ·            ──────┬──────
@@ -289,7 +289,7 @@ fn deploy_file_with_non_existing_template_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to load template
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-file-template-not-found.toml:3:9]
+       ╭─[tests/resources/vade-file-template-not-found.toml:3:9]
      2 │ [systemd-unit.template]
      3 │ file = "not-found.service"
        ·         ────────┬────────
@@ -324,7 +324,7 @@ fn deploy_with_invalid_user_string_in_vade_toml_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to render user-provided string
-        ╭─[/home/aochagavia/code/vade/tests/resources/vade-user-var-error.toml:11:47]
+        ╭─[tests/resources/vade-user-var-error.toml:11:47]
      10 │ vars = {
      11 │   exec_start = "{{{ vade.app.artifacts.active }}/goatcounter serve -listen :{{ port('main') }}"
         ·                                               ┬
@@ -389,6 +389,7 @@ fn fresh_out_dir(dir_name: &str) -> PathBuf {
 fn run_vade(args: &[&str]) {
     let output = Command::new(VADE_BIN)
         .args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .expect("failed to run the vade binary");
 
@@ -404,12 +405,11 @@ fn run_vade(args: &[&str]) {
 
 fn run_vade_expect_deploy_error(vade_toml: &str, extra_args: &[&str]) -> String {
     let out = fresh_out_dir("expect-deploy-error");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join(vade_toml);
     let mut args = vec![
         "deploy",
         "test-app",
         "--config",
-        path_arg(&config),
+        vade_toml,
         "--out-dir",
         path_arg(&out),
     ];
@@ -417,6 +417,7 @@ fn run_vade_expect_deploy_error(vade_toml: &str, extra_args: &[&str]) -> String 
 
     let output = Command::new(VADE_BIN)
         .args(&args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .expect("failed to run the vade binary");
 

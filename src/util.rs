@@ -68,3 +68,24 @@ pub fn diagnostic_with_help<S: SourceCode + 'static>(
     let labels = vec![labeled_span(details, span)];
     miette!(labels = labels, help = help, "{error}").with_source_code(source)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_path_resolver(root: &str, path: &str, expected: &str) {
+        let resolver = RelativePathResolver::with_root(PathBuf::from(root));
+        let resolved = resolver.resolve(Path::new(path));
+        assert_eq!(&*resolved, Path::new(expected));
+    }
+
+    #[test]
+    fn test_path_resolver_absolute() {
+        test_path_resolver("/home/johndoe", "/opt/some-path", "/opt/some-path");
+    }
+
+    #[test]
+    fn test_path_resolver_relative() {
+        test_path_resolver("/home/johndoe", "some-path", "/home/johndoe/some-path");
+    }
+}

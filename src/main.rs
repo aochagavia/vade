@@ -38,8 +38,8 @@ fn deploy(command: DeployCommand) -> Result<(), Report> {
         config::load(&command.app_name, &config_path, uses_default_config_path)?;
 
     // safety: we know that config_path is a file, hence its path always has a parent
-    let config_parent_path = config_path.parent().unwrap();
-    let path_resolver = RelativePathResolver::with_root(config_parent_path.to_owned());
+    let config_parent_path = config_path.parent().unwrap().canonicalize().unwrap();
+    let path_resolver = RelativePathResolver::with_root(config_parent_path);
 
     let deployment = AppDeployment::from_config(
         &command.app_name,
