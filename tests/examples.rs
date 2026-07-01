@@ -152,7 +152,7 @@ fn deploy_with_bad_toml_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to parse vade config file
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-bad-toml.toml:1:16]
+       ╭─[<REPO_ROOT>/tests/resources/vade-bad-toml.toml:1:16]
      1 │ ╭─▶ [[systemd-unit]
      2 │ ├─▶ [systemd-unit.template]
        · ╰──── expected a right bracket, found a newline
@@ -167,7 +167,7 @@ fn deploy_with_multiple_issues_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to parse vade config file
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-multiple-errors.toml:3:12]
+       ╭─[<REPO_ROOT>/tests/resources/vade-multiple-errors.toml:3:12]
      2 │ [systemd-unit.template]
      3 │ builtin = "webapp.service"
        ·            ───────┬──────
@@ -189,7 +189,7 @@ fn deploy_with_duplicate_unit_filenames_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × invalid vade config file
-       ╭─[/home/aochagavia/code/vade/tests/resources/vade-duplicate-unit-filenames.toml:3:1]
+       ╭─[<REPO_ROOT>/tests/resources/vade-duplicate-unit-filenames.toml:3:1]
      2 │ # to the same file on the server
      3 │ [[systemd-unit]]
        · ────────┬────────
@@ -218,7 +218,7 @@ fn deploy_with_invalid_artifacts_not_found_raises_error() {
        ·         ──────┬─────
        ·               ╰── the provided path does not exist or is not a directory
        ╰────
-      help: the artifacts path resolved to `/home/aochagavia/code/vade/tests/
+      help: the artifacts path resolved to `<REPO_ROOT>/tests/
             resources/nothing-here`
     "#);
 }
@@ -295,7 +295,7 @@ fn deploy_file_with_non_existing_template_raises_error() {
        ·         ────────┬────────
        ·                 ╰── reading the file resulted in an error: No such file or directory (os error 2)
        ╰────
-      help: the path resolved to `/home/aochagavia/code/vade/tests/resources/not-
+      help: the path resolved to `<REPO_ROOT>/tests/resources/not-
             found.service`
     "#);
 }
@@ -307,7 +307,7 @@ fn deploy_file_template_with_missing_var_raises_error() {
 
     insta::assert_snapshot!(stderr, @"
     Error:   × failed to render jinja2 template for systemd unit
-       ╭─[/home/aochagavia/code/vade/tests/resources/almost-empty.service:1:4]
+       ╭─[<REPO_ROOT>/tests/resources/almost-empty.service:1:4]
      1 │ {{ vars.hey }}
        ·    ────┬───
        ·        ╰── undefined value
@@ -404,6 +404,9 @@ fn run_vade(args: &[&str]) {
 }
 
 fn run_vade_expect_deploy_error(vade_toml: &str, extra_args: &[&str]) -> String {
+    // Unrelated to this fn, but helps us avoid the noise of writing this line for each test
+    bind_repo_root_filter();
+
     let out = fresh_out_dir("expect-deploy-error");
     let mut args = vec![
         "deploy",
@@ -439,4 +442,20 @@ fn assert_execute_py_created(out_dir: &Path, config: Option<&Path>, command: &st
 
 fn path_arg(path: &Path) -> &str {
     path.to_str().expect("path is not valid UTF-8")
+}
+
+// Rewrite the repo root path in snapshots, because it is machine-specific and we want snapshots to
+// be independent of the local setup
+//
+// Note: this is unfortunately brittle, because the path could potentially be cut in two if the line
+// where it appears exceeds a certain length. If a newline ends up in the midst of the repo root path,
+// the filter won't match it. If this ever becomes a real issue, we should configure vade to NOT wrap
+// diagnostics when running the tests.
+fn bind_repo_root_filter() {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(&regex::escape(env!("CARGO_MANIFEST_DIR")), "<REPO_ROOT>");
+
+    // Forget ensures the settings remain bound for the entire duration of the current
+    // thread
+    std::mem::forget(settings.bind_to_scope());
 }
