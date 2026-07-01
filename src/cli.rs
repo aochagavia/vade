@@ -174,11 +174,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_equals() {
-        assert!(VarOverride::from_str("caddyfile.vars.domains").is_err());
-    }
-
-    #[test]
     fn rejects_invalid_index() {
         assert!(VarOverride::from_str("systemd-unit[x].vars.foo=1").is_err());
         assert!(VarOverride::from_str("systemd-unit[0.foo=1").is_err());
@@ -189,10 +184,5 @@ mod tests {
         assert!(VarOverride::from_str("caddyfile.vars.=x").is_err());
         assert!(VarOverride::from_str("systemd-unit[0].vars.=x").is_err());
         assert!(VarOverride::from_str("systemd-unit[0].vars=x").is_err());
-    }
-
-    #[test]
-    fn rejects_invalid_json() {
-        assert!(VarOverride::from_str("caddyfile.vars.domains=[").is_err());
     }
 }

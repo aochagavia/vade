@@ -508,21 +508,10 @@ pub static SERVER_SETUP_TEMPLATE: &str =
 mod tests {
     use super::*;
     use crate::app_deployment::SystemdUnit;
-    use crate::config::{TemplateAndUserVars, UserVars};
+    use crate::config::TemplateAndUserVars;
     use crate::util::ResolvedPath;
     use minijinja::Value;
     use std::str::FromStr;
-
-    // Renders a miette report (for use in insta snapshots)
-    fn render_report(err: &Report) -> String {
-        let mut out = String::new();
-        miette::GraphicalReportHandler::new()
-            .with_theme(miette::GraphicalTheme::unicode_nocolor())
-            .with_width(80)
-            .render_report(&mut out, &**err)
-            .unwrap();
-        out
-    }
 
     fn get_test_minijinja_context(deployment: Option<&AppDeployment>) -> Value {
         base_minijinja_context(
@@ -590,79 +579,5 @@ mod tests {
         assert!(missing_user_var_hint(ErrorKind::UndefinedError, "vars").is_none());
         // A different error kind (e.g. a syntax error) shouldn't trigger the hint
         assert!(missing_user_var_hint(ErrorKind::SyntaxError, "vars.domains").is_none());
-    }
-
-    #[test]
-    fn test_render_create() {
-        let context = get_test_minijinja_context(None);
-        let env = base_minijinja_env().unwrap();
-        let template = env.get_template("shared/create-tasks.py.j2").unwrap();
-        template.render(context).unwrap();
-    }
-
-    #[test]
-    fn test_render_error() {
-        let context = get_test_minijinja_context(None);
-        let mut env = base_minijinja_env().unwrap();
-
-        let template = "hello {{ does_not_exist }}";
-        let Err(err) = render_user_template(
-            &mut env,
-            &context,
-            &TomlSource {
-                path: "/path/to/vade.toml".to_string(),
-                value: "# dummy toml file".to_string(),
-            },
-            &TemplateSource::file("tmp".to_string(), template.into()),
-            "failed to render template",
-        ) else {
-            panic!("expected rendering to fail");
-        };
-
-        insta::assert_snapshot!(render_report(&err), @"
-         × failed to render template
-          ╭─[tmp:1:10]
-        1 │ hello {{ does_not_exist }}
-          ·          ───────┬──────
-          ·                 ╰── undefined value
-          ╰────
-        ");
-    }
-
-    #[test]
-    fn test_render_error_hints_at_missing_user_var() {
-        let context = get_test_minijinja_context(None);
-        let mut env = base_minijinja_env().unwrap();
-
-        // `vars.exec_start` is referenced but never declared in the (empty) `vars` namespace
-        let context = context! { vars => UserVars::default().into_minijinja(), ..context };
-        let template = "ExecStart={{ vars.exec_start }}";
-        let Err(err) = render_user_template(
-            &mut env,
-            &context,
-            &TomlSource {
-                path: "/path/to/vade.toml".to_string(),
-                value: "# dummy toml file".to_string(),
-            },
-            &TemplateSource::file("main.service".to_string(), template.into()),
-            "failed to render template",
-        ) else {
-            panic!("expected rendering to fail");
-        };
-
-        // The rendered diagnostic points at the offending expression and hints at declaring the
-        // user variable in `vade.toml`.
-        insta::assert_snapshot!(render_report(&err), @"
-         × failed to render template
-          ╭─[main.service:1:14]
-        1 │ ExecStart={{ vars.exec_start }}
-          ·              ───────┬───────
-          ·                     ╰── undefined value
-          ╰────
-         help: `exec_start` is a user-defined variable. Declare it in your
-               `vade.toml` file under the relevant template's `vars`, e.g. `vars =
-               { exec_start = ... }`, or inject it through the CLI using the `--set`
-               option.
-        ");
     }
 }

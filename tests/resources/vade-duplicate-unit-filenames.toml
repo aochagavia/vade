@@ -1,0 +1,9 @@
+# Both units default to no suffix and the `service` extension, so they would write
+# to the same file on the server
+[[systemd-unit]]
+[systemd-unit.template]
+inline = "first"
+
+[[systemd-unit]]
+[systemd-unit.template]
+inline = "second"

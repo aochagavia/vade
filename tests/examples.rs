@@ -162,6 +162,51 @@ fn deploy_with_bad_toml_raises_error() {
 }
 
 #[test]
+fn deploy_with_multiple_issues_raises_error() {
+    let stderr = run_vade_expect_deploy_error("tests/resources/vade-multiple-errors.toml", &[]);
+
+    insta::assert_snapshot!(stderr, @r#"
+    Error:   × failed to parse vade config file
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-multiple-errors.toml:3:12]
+     2 │ [systemd-unit.template]
+     3 │ builtin = "webapp.service"
+       ·            ───────┬──────
+       ·                   ╰── conflicting template source: set only one of `builtin`, `file`, or `inline`
+     4 │ inline = "oops, two sources"
+       ·           ────────┬────────
+       ·                   ╰── conflicting template source: set only one of `builtin`, `file`, or `inline`
+     5 │ typo-key = 1
+       · ────┬───
+       ·     ╰── unexpected key `typo-key`
+       ╰────
+    "#);
+}
+
+#[test]
+fn deploy_with_duplicate_unit_filenames_raises_error() {
+    let stderr =
+        run_vade_expect_deploy_error("tests/resources/vade-duplicate-unit-filenames.toml", &[]);
+
+    insta::assert_snapshot!(stderr, @r#"
+    Error:   × invalid vade config file
+       ╭─[/home/aochagavia/code/vade/tests/resources/vade-duplicate-unit-filenames.toml:3:1]
+     2 │ # to the same file on the server
+     3 │ [[systemd-unit]]
+       · ────────┬────────
+       ·         ╰── systemd unit filename `test-app.service` is declared multiple times, you can use the `filename-suffix` and `file-extension` properties to differentiate between them
+     4 │ [systemd-unit.template]
+     5 │ inline = "first"
+     6 │ 
+     7 │ [[systemd-unit]]
+       · ────────┬────────
+       ·         ╰── systemd unit filename `test-app.service` is declared multiple times, you can use the `filename-suffix` and `file-extension` properties to differentiate between them
+     8 │ [systemd-unit.template]
+     9 │ inline = "second"
+       ╰────
+    "#);
+}
+
+#[test]
 fn deploy_with_invalid_artifacts_not_found_raises_error() {
     let stderr = run_vade_expect_deploy_error("tests/resources/vade-artifacts-not-found.toml", &[]);
 
