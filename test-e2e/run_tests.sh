@@ -15,7 +15,7 @@ By default we create a fresh VM, provision it from scratch, and run every
 test.
 
 Options:
-  Python demo overwrite-vm   Skip VM creation and server setup, reusing the existing VM
+  --reuse-vm   Skip VM creation and server setup, reusing the existing VM
   -h, --help   Show this help
 
 Available tests:

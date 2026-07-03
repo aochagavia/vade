@@ -14,8 +14,6 @@ pub fn execute(app_name: &AppName, out_dir: &Path) -> Result<(), Report> {
     // Write the pyinfra deploy
     let deploy = templating::render_internal(&mut env, &context, "destroy", DESTROY_TEMPLATE)?;
 
-    // TODO: ask for user confirmation?
-
     fs::write(out_dir.join("execute.py"), deploy)
         .into_diagnostic()
         .context("failed to write pyinfra deploy")?;
