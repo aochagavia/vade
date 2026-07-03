@@ -40,7 +40,6 @@ pub fn base_minijinja_context(
     variables.extend([
         ("vade.app.name", app_name.as_str().into()),
         ("vade.app.username", username.into()),
-        ("vade.app.paths.home", home_dir.into()),
         (
             "vade.app.paths.secrets",
             format!("{home_dir}/secrets").into(),
@@ -53,6 +52,7 @@ pub fn base_minijinja_context(
             "vade.app.paths.artifacts",
             format!("{active_deployment}/artifacts").into(),
         ),
+        ("vade.internal.app.paths.home", home_dir.into()),
         (
             "vade.internal.app.paths.deployment_active",
             active_deployment.into(),

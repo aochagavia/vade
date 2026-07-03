@@ -41,7 +41,7 @@ systemctl reload caddy
 files.directory(
     name="Delete app directory",
     present=False,
-    path="{{ vade.app.paths.home }}",
+    path="{{ vade.internal.app.paths.home }}",
 )
 
 server.user(
