@@ -2,14 +2,14 @@
 path = "artifacts"
 
 [caddyfile.template]
-builtin = "reverse-proxy"
+built-in = "reverse-proxy"
 vars = {
   domains = ["guestbook.example.com"]
 }
 
 [[systemd-unit]]
 [systemd-unit.template]
-builtin = "webapp.service"
+built-in = "webapp.service"
 vars = {
   exec_start = "{{ vade.app.paths.artifacts }}/guestbook"
 }

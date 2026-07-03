@@ -149,18 +149,18 @@ to illustrate the meaning of each part.
 [artifacts]
 path = "artifacts"
 
-# This app has a Caddyfile, based on a builtin template called
+# This app has a Caddyfile, based on a built-in template called
 # `reverse-proxy`. The template requires the user to provide a `domains`
 # variable consisting of a list of domain names. If you look at the Caddyfile
 # template (linked after this code block), you will see that Caddy will route
 # requests addressed at any of those domains to the port used by the app.
 [caddyfile.template]
-builtin = "reverse-proxy"
+built-in = "reverse-proxy"
 vars = {
   domains = ["goats.example.com"]
 }
 
-# This app has one systemd unit, based on a builtin template called
+# This app has one systemd unit, based on a built-in template called
 # `webapp.service`. The template requires the user to provide an `exec_start`
 # variable consisting of a string. If you look at the systemd unit template
 # (linked after this code block), you will see that the contents of
@@ -168,7 +168,7 @@ vars = {
 # `exec_start` tells systemd how to run your app.
 [[systemd-unit]]
 [systemd-unit.template]
-builtin = "webapp.service"
+built-in = "webapp.service"
 vars = {
   exec_start = "{{ vade.app.paths.artifacts }}/goatcounter serve -listen :{{ port('main') }}"
 }
@@ -186,7 +186,7 @@ Links:
 
 Misc:
 
-- Next to `builtin` templates, you can have `file` templates (i.e., a path to a file) and
+- Next to `built-in` templates, you can have `file` templates (i.e., a path to a file) and
   `inline` templates (i.e., a string to be used as the Caddyfile or system unit).
 - When you have more than one systemd unit for the same app, you need to make sure they have
   different names (otherwise vade will refuse to deploy). By default, systemd unit files are named

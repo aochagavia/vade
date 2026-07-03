@@ -2,7 +2,7 @@
 path = "artifacts"
 
 [caddyfile.template]
-builtin = "static-files"
+built-in = "static-files"
 vars = {
   domains = ["static-site.example.com"]
 }

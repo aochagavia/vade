@@ -1,5 +1,5 @@
 [[systemd-unit]]
 [systemd-unit.template]
-builtin = "webapp.service"
+built-in = "webapp.service"
 inline = "oops, two sources"
 typo-key = 1

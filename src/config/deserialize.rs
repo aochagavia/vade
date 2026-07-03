@@ -43,7 +43,7 @@ impl<'de> Deserialize<'de> for TemplateConfig {
         let mut th = TableHelper::new(value)?;
 
         // We expect one of three possibilities
-        let builtin = th.optional_s::<String>("builtin");
+        let builtin = th.optional_s::<String>("built-in");
         let file = th.optional_s::<String>("file");
         let inline = th.optional_s::<String>("inline");
         let origin = match (builtin, file, inline) {
@@ -61,7 +61,7 @@ impl<'de> Deserialize<'de> for TemplateConfig {
             (None, None, None) => {
                 th.errors.push(Error {
                     kind: ErrorKind::Custom(
-                        "missing template source: set exactly one of `builtin`, `file`, or `inline`"
+                        "missing template source: set exactly one of `built-in`, `file`, or `inline`"
                             .into(),
                     ),
                     span,
@@ -76,7 +76,7 @@ impl<'de> Deserialize<'de> for TemplateConfig {
                 {
                     th.errors.push(Error {
                         kind: ErrorKind::Custom(
-                            "conflicting template source: set only one of `builtin`, `file`, or `inline`"
+                            "conflicting template source: set only one of `built-in`, `file`, or `inline`"
                                 .into(),
                         ),
                         span: present,

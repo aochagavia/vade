@@ -382,7 +382,7 @@ fn minijinja_error_to_report(
             let (named_source, internal) = match &source.meta {
                 TemplateSourceMeta::Builtin { id, kind } => (
                     NamedSource::new(
-                        format!("{id} (builtin {} template)", kind.as_str()),
+                        format!("{id} (built-in {} template)", kind.as_str()),
                         source.value.clone(),
                     ),
                     matches!(kind, BuiltinTemplateKind::Internal),

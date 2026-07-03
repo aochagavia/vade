@@ -1,4 +1,4 @@
 [[systemd-unit]]
 [systemd-unit.template]
 # Note the missing `e` at the end
-builtin = "webapp.servic"
+built-in = "webapp.servic"

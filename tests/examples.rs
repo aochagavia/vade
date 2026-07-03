@@ -156,7 +156,7 @@ fn deploy_with_bad_toml_raises_error() {
      1 │ ╭─▶ [[systemd-unit]
      2 │ ├─▶ [systemd-unit.template]
        · ╰──── expected a right bracket, found a newline
-     3 │     builtin = "webapp.service"
+     3 │     built-in = "webapp.service"
        ╰────
     "#);
 }
@@ -167,14 +167,14 @@ fn deploy_with_multiple_issues_raises_error() {
 
     insta::assert_snapshot!(stderr, @r#"
     Error:   × failed to parse vade config file
-       ╭─[<REPO_ROOT>/tests/resources/vade-multiple-errors.toml:3:12]
+       ╭─[<REPO_ROOT>/tests/resources/vade-multiple-errors.toml:3:13]
      2 │ [systemd-unit.template]
-     3 │ builtin = "webapp.service"
-       ·            ───────┬──────
-       ·                   ╰── conflicting template source: set only one of `builtin`, `file`, or `inline`
+     3 │ built-in = "webapp.service"
+       ·             ───────┬──────
+       ·                    ╰── conflicting template source: set only one of `built-in`, `file`, or `inline`
      4 │ inline = "oops, two sources"
        ·           ────────┬────────
-       ·                   ╰── conflicting template source: set only one of `builtin`, `file`, or `inline`
+       ·                   ╰── conflicting template source: set only one of `built-in`, `file`, or `inline`
      5 │ typo-key = 1
        · ────┬───
        ·     ╰── unexpected key `typo-key`
@@ -252,7 +252,7 @@ fn deploy_builtin_with_missing_var_raises_error() {
 
     insta::assert_snapshot!(stderr, @"
     Error:   × failed to render jinja2 template for systemd unit
-        ╭─[webapp.service (builtin systemd unit template):12:14]
+        ╭─[webapp.service (built-in systemd unit template):12:14]
      11 │ Type=simple
      12 │ ExecStart={{ vars.exec_start }}
         ·              ───────┬───────
@@ -272,12 +272,12 @@ fn deploy_builtin_with_non_existing_name_raises_error() {
         run_vade_expect_deploy_error("tests/resources/vade-builtin-template-not-found.toml", &[]);
 
     insta::assert_snapshot!(stderr, @r#"
-    Error:   × unknown builtin template
-       ╭─[tests/resources/vade-builtin-template-not-found.toml:4:12]
+    Error:   × unknown built-in template
+       ╭─[tests/resources/vade-builtin-template-not-found.toml:4:13]
      3 │ # Note the missing `e` at the end
-     4 │ builtin = "webapp.servic"
-       ·            ──────┬──────
-       ·                  ╰── there is no systemd unit template with this name
+     4 │ built-in = "webapp.servic"
+       ·             ──────┬──────
+       ·                   ╰── there is no systemd unit template with this name
        ╰────
     "#);
 }

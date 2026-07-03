@@ -155,7 +155,7 @@ pub struct TemplateConfig {
     /// The origin from which the template will be loaded
     ///
     /// The following origins are supported:
-    /// - `builtin`: loads one of the built-in templates (those under `src/resources/systemd-unit-templates` or `src/resources/caddyfile-templates`)
+    /// - `built-in`: loads one of the built-in templates (those under `src/resources/systemd-unit-templates` or `src/resources/caddyfile-templates`)
     /// - `inline`: loads the template from the provided string
     /// - `file`: loads the template from the filesystem. If the path is relative, it will be resolved relative to the configuration file, not to the current working directory
     ///
@@ -186,7 +186,7 @@ impl TemplateConfig {
             TemplateOrigin::Builtin(template_name) => {
                 let builtin = kind.get_builtin_source(template_name).ok_or_else(|| {
                     diagnostic(
-                        "unknown builtin template",
+                        "unknown built-in template",
                         format!("there is no {kind} template with this name"),
                         self.origin.span,
                         toml_source.to_named_source(),
@@ -430,13 +430,13 @@ path = "artifacts"
 
 [[systemd-unit]]
 [systemd-unit.template]
-builtin = "webapp.service"
+built-in = "webapp.service"
 vars = {
   exec_start = "{{ vade.app_paths.active_artifacts_dir }}/goatcounter serve -listen :{{ vade.app_port }}"
 }
 
 [caddyfile.template]
-builtin = "reverse-proxy"
+built-in = "reverse-proxy"
 vars = {
   domains = ["goats.example.com"]
 }
@@ -460,7 +460,7 @@ vars = {
         assert_eq!(
             systemd_config.template.value.vars.value["exec_start"],
             UserVar::String(
-                UserVarString::toml("{{ vade.app_paths.active_artifacts_dir }}/goatcounter serve -listen :{{ vade.app_port }}".to_string(), Span::new(126, 214))
+                UserVarString::toml("{{ vade.app_paths.active_artifacts_dir }}/goatcounter serve -listen :{{ vade.app_port }}".to_string(), Span::new(127, 215))
             )
         );
 
@@ -474,7 +474,7 @@ vars = {
             caddyfile_config.template.value.vars.value["domains"],
             UserVar::List(vec![UserVar::String(UserVarString::toml(
                 "goats.example.com".to_string(),
-                Span::new(289, 306)
+                Span::new(291, 308)
             ))])
         );
     }
