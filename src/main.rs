@@ -7,7 +7,7 @@ mod templating;
 mod util;
 
 use crate::cli::ServerSetupCommand;
-use crate::commands::server_setup;
+use crate::commands::{destroy, server_setup};
 use crate::util::RelativePathResolver;
 use app_deployment::AppDeployment;
 use clap::Parser;
@@ -20,6 +20,7 @@ fn main() -> Result<(), Report> {
     match cli.command {
         Command::ServerSetup(cmd) => server_setup(cmd),
         Command::Create(cmd) => create::execute(&cmd.app_name, &cmd.out_dir),
+        Command::Destroy(cmd) => destroy::execute(&cmd.app_name, &cmd.out_dir),
         Command::Deploy(cmd) => deploy(cmd),
     }
 }

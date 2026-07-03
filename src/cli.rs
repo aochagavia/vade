@@ -29,6 +29,10 @@ pub enum Command {
     /// command is mostly useful when you need to do some initialization work before the first
     /// deployment (e.g., setting up secrets).
     Create(CreateCommand),
+    /// Destroy an application on the server
+    ///
+    /// Warning: this will delete all app state. Use with care!
+    Destroy(DestroyCommand),
 }
 
 #[derive(Parser)]
@@ -41,6 +45,17 @@ pub struct ServerSetupCommand {
 #[derive(Parser)]
 pub struct CreateCommand {
     /// The name of the app to create on the server
+    ///
+    /// Only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed
+    pub app_name: AppName,
+    /// The directory where the pyinfra deploy and related files should be generated
+    #[arg(short, long, default_value = "vadegen")]
+    pub out_dir: PathBuf,
+}
+
+#[derive(Parser)]
+pub struct DestroyCommand {
+    /// The name of the app to destroy on the server
     ///
     /// Only alphanumeric characters, dashes (`-`), and underscores (`_`) are allowed
     pub app_name: AppName,

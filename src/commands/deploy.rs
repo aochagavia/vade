@@ -1,5 +1,6 @@
 use crate::app_deployment::AppDeployment;
 use crate::app_name::AppName;
+use crate::commands::create_out_dir;
 use crate::config::TomlSource;
 use crate::templating;
 use crate::templating::DEPLOY_TEMPLATE;
@@ -14,14 +15,7 @@ pub fn execute(
     out_dir: PathBuf,
     toml_config: &TomlSource, // necessary for diagnostics
 ) -> Result<(), Report> {
-    fs::create_dir_all(&out_dir)
-        .into_diagnostic()
-        .with_context(|| {
-            format!(
-                "failed to create output directory at `{}`",
-                out_dir.display()
-            )
-        })?;
+    create_out_dir(&out_dir)?;
 
     let out_dir_abs = path::absolute(&out_dir).unwrap();
     let context =

@@ -1,0 +1,51 @@
+{% include "shared/header.py.j2" %}
+
+# Require user confirmation, since this is destructive
+if not bool(host.data.get("confirm_destroy")):
+    answer = input(
+        "\n⚠️  This deploy performs DESTRUCTIVE actions. Continue? [y/N] "
+    ).strip().lower()
+
+    if answer not in ("y", "yes"):
+        print("Aborted by user.")
+        sys.exit(1)
+
+server.shell(
+    name="Stop current deployment",
+    commands=r"""
+set -uo pipefail
+
+# Stop, disable, and delete the currently active deployment's systemd units if present
+# (installed unit paths are derived them from their copies in the active deployment)
+if [ -d "{{ vade.internal.app.paths.active_systemd_unit_copies }}" ]; then
+  for unit_copy in "{{ vade.internal.app.paths.active_systemd_unit_copies }}"/*; do
+    [ -e "$unit_copy" ] || continue
+    unit_name="$(basename "$unit_copy")"
+    installed_path="/etc/systemd/system/$unit_name"
+    if [ -f "$installed_path" ]; then
+      systemctl is-active --quiet "$unit_name" && systemctl stop "$unit_name"
+      systemctl disable "$unit_name"
+      rm "$installed_path"
+    fi
+  done
+
+  systemctl daemon-reload
+fi
+
+rm -rf "{{ vade.internal.app.paths.deployment_active }}"
+
+# Let Caddy know that any previously deployed Caddyfile for this app no longer exists
+systemctl reload caddy
+""")
+
+files.directory(
+    name="Delete app directory",
+    present=False,
+    path="{{ vade.app.paths.home }}",
+)
+
+server.user(
+    name="Delete app user",
+    user="{{ vade.app.username }}",
+    present=False,
+)

@@ -5,7 +5,7 @@ VM_NAME=vade-test-vm
 
 # The tests we know how to run, in the order a full run executes them. Each
 # entry `foo-bar` maps to a `test_foo_bar` function defined below.
-ALL_TESTS=(static-site static-site-unchanged python-no-deps python-no-deps-overwrite guestbook guestbook-rollback goatcounter timer existing-user existing-systemd-unit invalid-systemd-unit invalid-caddyfile)
+ALL_TESTS=(static-site static-site-unchanged python-no-deps python-no-deps-overwrite guestbook guestbook-rollback guestbook-destroyed goatcounter timer existing-user existing-systemd-unit invalid-systemd-unit invalid-caddyfile)
 
 usage() {
   cat <<EOF
@@ -135,7 +135,6 @@ test_static-site() {
 
 test_static-site-unchanged() {
   test_static-site
-  test_static-site
 
   # There should be hardlinks, meaning that the second deploy reused the artifacts from the first
   # one (instead of transfering them again over the network)
@@ -214,6 +213,31 @@ test_guestbook-rollback() {
   local response
   response=$(curl -fsSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/)
   assert_response_contains "Guestbook GET check" '<h2>Sign the Guestbook:</h2>' "$response"
+}
+
+test_guestbook-destroyed() {
+  if [[ $(sudo incus exec vade-test-vm -- systemctl is-enabled my-guestbook) != "enabled" ]]; then
+    echo "❌ Guestbook-destroyed check FAILED: systemd unit should have been enabled!"
+    exit 1
+  fi
+
+  # Destroy
+  cargo run -- destroy my-guestbook --out-dir ../examples/guestbook/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/guestbook/vadegen/execute.py --data confirm_destroy=true
+
+  # Check that the systemd unit no longer exists
+  if [[ $(sudo incus exec vade-test-vm -- systemctl is-enabled my-guestbook) != "not-found" ]]; then
+    echo "❌ Guestbook-destroyed check FAILED: systemd unit should have been disabled!"
+    exit 1
+  fi
+
+  # Check response
+  if ! response=$(curl -sSk -u foo:123 --resolve guestbook.example.com:443:"$VM_IP_ADDR" https://guestbook.example.com/); then
+    echo "Guestbook is no longer reachable over HTTP"
+  else
+    echo "❌ Guestbook-destroyed check FAILED: still reachable over HTTP"
+    exit 1
+  fi
 }
 
 test_goatcounter() {

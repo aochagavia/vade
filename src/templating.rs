@@ -508,6 +508,7 @@ static PROMOTE_SCRIPT_TEMPLATE: &str =
 // Full deploys
 pub static DEPLOY_TEMPLATE: &str = include_str!("resources/pyinfra-templates/deploy.py.j2");
 pub static CREATE_TEMPLATE: &str = include_str!("resources/pyinfra-templates/create.py.j2");
+pub static DESTROY_TEMPLATE: &str = include_str!("resources/pyinfra-templates/destroy.py.j2");
 pub static SERVER_SETUP_TEMPLATE: &str =
     include_str!("resources/pyinfra-templates/server-setup.py.j2");
 

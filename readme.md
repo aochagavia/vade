@@ -242,7 +242,7 @@ deploying an application, it counts the number of ports that the app needs (base
 Finding the next available port number is a matter of looking at the `assigned-ports` of each
 deployed application, then finding the port that is closest to 8000 and has not yet been assigned.
 The specific code lives in [assign-ports.py](./src/resources/scripts/assign-ports.py), which gets
-transferred to the server as part of the `server-setup` command.
+transfered to the server as part of the `server-setup` command.
 
 As a corollary, make sure your server is not running software that listens on TCP ports close to
 8000, as that would result in conflicts when vade assigns those ports to its own apps.
