@@ -49,7 +49,7 @@ fn examples_run_deploy() {
 
 #[test]
 fn deploy_applies_var_overrides() {
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/python-no-deps/vade.toml");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/goatcounter/vade.toml");
     let out = fresh_out_dir("override-deploy");
     run_vade(&[
         "deploy",
@@ -110,7 +110,7 @@ fn deploy_rejects_var_for_missing_config() {
 fn deploy_rejects_malformed_overrides() {
     // Invalid format (not path=value)
     let stderr = run_vade_expect_deploy_error(
-        "examples/python-no-deps/vade.toml",
+        "examples/goatcounter/vade.toml",
         &["--set", "no-equals-sign-to-be-seen"],
     );
 
@@ -122,7 +122,7 @@ fn deploy_rejects_malformed_overrides() {
 
     // Invalid path
     let stderr =
-        run_vade_expect_deploy_error("examples/python-no-deps/vade.toml", &["--set", "foo=42"]);
+        run_vade_expect_deploy_error("examples/goatcounter/vade.toml", &["--set", "foo=42"]);
 
     insta::assert_snapshot!(stderr, @"
     error: invalid value 'foo=42' for '--set <PATH=JSON>': failed to parse path `foo`: it must start with `caddyfile.vars.` or `systemd-unit[<index>].vars.`
@@ -132,7 +132,7 @@ fn deploy_rejects_malformed_overrides() {
 
     // Valid path, invalid value
     let stderr = run_vade_expect_deploy_error(
-        "examples/python-no-deps/vade.toml",
+        "examples/goatcounter/vade.toml",
         &[
             "--set",
             "systemd-unit[0].vars.exec_start=this_string_is_missing_quotes",

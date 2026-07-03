@@ -148,8 +148,8 @@ test_static-site-unchanged() {
 
 test_python-no-deps() {
   # Deploy
-  cargo run -- deploy my-python-no-deps --config ../examples/python-no-deps/vade.toml --out-dir ../examples/python-no-deps/vadegen
-  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ../examples/python-no-deps/vadegen/execute.py
+  cargo run -- deploy my-python-no-deps --config ./resources/python-no-deps/vade.toml --out-dir ./resources/python-no-deps/vadegen
+  pyinfra --user operator "${PYINFRA_SSH[@]}" "$VM_IP_ADDR" ./resources/python-no-deps/vadegen/execute.py
 
   # Check
   sleep 0.2
