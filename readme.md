@@ -2,7 +2,7 @@
 
 > A command-line tool to deploy applications on Linux servers
 
-Vade (short for _va_nilla _de_ploy) is a lightweight tool for single-server deployments. It builds
+Vade (short for **va**nilla **de**ploy) is a lightweight tool for single-server deployments. It builds
 directly on top of existing Linux abstractions (ssh, files, users, systemd, etc), instead of
 reinventing the wheel. As a side-effect, you have access to the full arsenal of Linux tools when
 setting up a deployment and when troubleshooting.
