@@ -277,6 +277,7 @@ pyinfra -y --user <ssh-user> <ssh-host> vadegen/execute.py
 Vade is tuned for scenarios where you:
 
 - Are deploying to a single server, not to a fleet.
+- Are deploying manually, not in a CI pipeline.
 - Can tolerate a few seconds of downtime between deployments.
 - Want TLS certificates to be automatically obtained and renewed.
 - Want full access to your infrastructure, with few abstractions in the way of the tools you know.
