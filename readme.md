@@ -300,5 +300,5 @@ As always, this comes with limitations:
   manage to get them working, do let me know so we can add an example to the repo and point to it
   in this readme.
 
-[pixi]: You might want to use `pixi global install <package>` for stuff that is not available through your package manager,
+[^pixi]: You might want to use `pixi global install <package>` for stuff that is not available through your package manager,
 see the [pixi homepage](https://pixi.prefix.dev/latest/) for details.
